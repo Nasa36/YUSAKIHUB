@@ -33,10 +33,12 @@ function Fly()
     end
 end
 
--- Função para trazer jogadores para você
-local function BringPlayer(targetPlayer)
-    if targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
-        targetPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame -- Mover o jogador selecionado para a posição do jogador local
+-- Função para trazer todos os jogadores para você
+local function BringAllPlayers()
+    for _, targetPlayer in pairs(game.Players:GetPlayers()) do
+        if targetPlayer ~= player and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            targetPlayer.Character.HumanoidRootPart.CFrame = player.Character.HumanoidRootPart.CFrame -- Mover o jogador selecionado para a posição do jogador local
+        end
     end
 end
 
@@ -55,27 +57,12 @@ buttonFly.Size = UDim2.new(0.8, 0, 0.2, 0)
 buttonFly.Position = UDim2.new(0.1, 0, 0.05, 0)
 buttonFly.MouseButton1Click:Connect(Fly)
 
--- Campo de Texto para Nome do Jogador
-local playerNameInput = Instance.new("TextBox", frame)
-playerNameInput.Size = UDim2.new(0.8, 0, 0.2, 0)
-playerNameInput.Position = UDim2.new(0.1, 0, 0.65, 0)
-playerNameInput.PlaceholderText = "Nome do Jogador"
-playerNameInput.Text = ""
-
--- Botão para Trazer Jogador
-local buttonBring = Instance.new("TextButton", frame)
-buttonBring.Text = "Bring Player"
-buttonBring.Size = UDim2.new(0.8, 0, 0.2, 0)
-buttonBring.Position = UDim2.new(0.1, 0, 0.85, 0)
-buttonBring.MouseButton1Click:Connect(function()
-    local targetPlayerName = playerNameInput.Text
-    local targetPlayer = game.Players:FindFirstChild(targetPlayerName)
-    if targetPlayer then
-        BringPlayer(targetPlayer)
-    else
-        warn("Jogador não encontrado!")
-    end
-end)
+-- Botão para Trazer Todos os Jogadores
+local buttonBringAll = Instance.new("TextButton", frame)
+buttonBringAll.Text = "Bring All Players"
+buttonBringAll.Size = UDim2.new(0.8, 0, 0.2, 0)
+buttonBringAll.Position = UDim2.new(0.1, 0, 0.25, 0)
+buttonBringAll.MouseButton1Click:Connect(BringAllPlayers)
 
 -- Botão de Fechar a UI
 local buttonClose = Instance.new("TextButton", frame)
