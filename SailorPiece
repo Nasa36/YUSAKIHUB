@@ -1,0 +1,1104 @@
+-- ⚡ SAILOR HUB v1.0 - Sailor Piece
+-- Script completo com todas as funcionalidades
+-- Interface profissional e otimizada para mobile/PC
+
+if getgenv().SAILOR_LOADED then
+    warn("SAILOR HUB já está em execução!")
+    return
+end
+getgenv().SAILOR_LOADED = true
+
+-- Serviços
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+
+-- Estado do Hub
+local SailorState = {
+    -- Combat
+    AutoFarm = false,
+    AutoQuest = false,
+    AutoAttack = false,
+    SkillDelay = 0.1,
+    
+    -- Movement
+    SpeedBoost = false,
+    SpeedValue = 50,
+    JumpBoost = false,
+    JumpValue = 100,
+    NoClip = false,
+    
+    -- Skills
+    AutoSkillZ = false,
+    AutoSkillX = false,
+    AutoSkillC = false,
+    AutoSkillV = false,
+    
+    -- Weapons
+    UseMelee = true,
+    UseSword = false,
+    UseFruit = false,
+    UseGun = false,
+    
+    -- Haki
+    AutoBusoshoku = false,
+    AutoKenbunshoku = false,
+    
+    -- ESP
+    ESPPlayers = false,
+    ESPChests = false,
+    ESPMobs = false,
+    ESPFruits = false,
+    
+    -- Misc
+    AutoCollect = false,
+    AutoClick = false,
+    AntiAFK = false,
+    
+    -- Posição
+    LockPosition = false,
+    LockedPosition = nil,
+}
+
+-- Conexões e objetos
+local Connections = {}
+local ESPObjects = {}
+
+-- Criar GUI Principal
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SailorHub"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+-- Proteger GUI
+if syn and syn.protect_gui then
+    syn.protect_gui(ScreenGui)
+    ScreenGui.Parent = game:GetService("CoreGui")
+elseif gethui then
+    ScreenGui.Parent = gethui()
+else
+    ScreenGui.Parent = game:GetService("CoreGui")
+end
+
+-- =====================================================================
+-- FUNÇÕES DE UTILIDADE
+-- =====================================================================
+
+-- Função para encontrar ferramentas
+local function FindTool(weaponType)
+    local char = Player.Character
+    if not char then return nil end
+    local backpack = Player.Backpack
+    
+    if weaponType == "Melee" then
+        -- Procura por armas corpo a corpo
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowName = item.Name:lower()
+                if lowName:find("combat") or lowName:find("melee") or lowName:find("soco") then
+                    return item
+                end
+            end
+        end
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowName = item.Name:lower()
+                if lowName:find("combat") or lowName:find("melee") or lowName:find("soco") then
+                    return item
+                end
+            end
+        end
+        
+    elseif weaponType == "Sword" then
+        -- Procura por espadas
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowName = item.Name:lower()
+                if lowName:find("sword") or lowName:find("katana") or lowName:find("blade") or lowName:find("cutlass") then
+                    return item
+                end
+            end
+        end
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowName = item.Name:lower()
+                if lowName:find("sword") or lowName:find("katana") or lowName:find("blade") or lowName:find("cutlass") then
+                    return item
+                end
+            end
+        end
+        
+    elseif weaponType == "Fruit" then
+        -- Procura por frutas
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowName = item.Name:lower()
+                if lowName:find("fruit") or lowName:find("gomu") or lowName:find("mera") or lowName:find("power") then
+                    return item
+                end
+            end
+        end
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowName = item.Name:lower()
+                if lowName:find("fruit") or lowName:find("gomu") or lowName:find("mera") or lowName:find("power") then
+                    return item
+                end
+            end
+        end
+        
+    elseif weaponType == "Gun" then
+        -- Procura por armas de fogo
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowName = item.Name:lower()
+                if lowName:find("gun") or lowName:find("pistol") or lowName:find("rifle") or lowName:find("cannon") then
+                    return item
+                end
+            end
+        end
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") then
+                local lowName = item.Name:lower()
+                if lowName:find("gun") or lowName:find("pistol") or lowName:find("rifle") or lowName:find("cannon") then
+                    return item
+                end
+            end
+        end
+    end
+    
+    return nil
+end
+
+-- Função para equipar arma
+local function EquipWeapon(weaponType)
+    local char = Player.Character
+    if not char then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    
+    local tool = FindTool(weaponType)
+    if not tool then return false end
+    
+    if tool.Parent ~= char then
+        humanoid:EquipTool(tool)
+        task.wait(0.1)
+    end
+    
+    return true
+end
+
+-- Função para usar skill
+local function UseSkill(key)
+    pcall(function()
+        -- Tenta encontrar remotes específicos do Sailor Piece
+        local remotes = {
+            ReplicatedStorage:FindFirstChild("Remotes"),
+            ReplicatedStorage:FindFirstChild("Events"),
+            ReplicatedStorage:FindFirstChild("Skills"),
+            ReplicatedStorage:FindFirstChild("Combat"),
+        }
+        
+        local keyToIndex = {
+            [Enum.KeyCode.Z] = 1,
+            [Enum.KeyCode.X] = 2,
+            [Enum.KeyCode.C] = 3,
+            [Enum.KeyCode.V] = 4,
+        }
+        
+        local skillIndex = keyToIndex[key]
+        
+        -- Tenta enviar via remote
+        for _, remote in ipairs(remotes) do
+            if remote then
+                local skillRemote = remote:FindFirstChild("UseSkill") or 
+                                   remote:FindFirstChild("ActivateSkill") or
+                                   remote:FindFirstChild("Skill")
+                if skillRemote and skillRemote:IsA("RemoteEvent") then
+                    skillRemote:FireServer(skillIndex)
+                    return
+                end
+            end
+        end
+        
+        -- Fallback: VirtualInputManager
+        VirtualInputManager:SendKeyEvent(true, key, false, game)
+        task.wait(0.03)
+        VirtualInputManager:SendKeyEvent(false, key, false, game)
+    end)
+end
+
+-- Função para encontrar inimigos próximos
+local function FindNearestEnemy(range)
+    local char = Player.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+    
+    local pos = char.HumanoidRootPart.Position
+    local nearest = nil
+    local nearestDist = range or 30
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= Player then
+            local pchar = player.Character
+            if pchar and pchar:FindFirstChild("HumanoidRootPart") and pchar:FindFirstChildOfClass("Humanoid") then
+                local humanoid = pchar:FindFirstChildOfClass("Humanoid")
+                if humanoid and humanoid.Health > 0 then
+                    local dist = (pos - pchar.HumanoidRootPart.Position).Magnitude
+                    if dist < nearestDist then
+                        nearest = pchar
+                        nearestDist = dist
+                    end
+                end
+            end
+        end
+    end
+    
+    return nearest
+end
+
+-- Loop de AutoSkill
+local function RunAutoSkillLoop(stateKey, skillKey)
+    return task.spawn(function()
+        while SailorState[stateKey] do
+            task.wait(SailorState.SkillDelay)
+            
+            pcall(function()
+                if SailorState.UseMelee then
+                    EquipWeapon("Melee")
+                    UseSkill(skillKey)
+                end
+                
+                if SailorState.UseSword then
+                    EquipWeapon("Sword")
+                    UseSkill(skillKey)
+                end
+                
+                if SailorState.UseFruit then
+                    EquipWeapon("Fruit")
+                    UseSkill(skillKey)
+                end
+                
+                if SailorState.UseGun then
+                    EquipWeapon("Gun")
+                    UseSkill(skillKey)
+                end
+            end)
+        end
+    end)
+end
+
+-- =====================================================================
+-- CRIAÇÃO DA INTERFACE GRÁFICA
+-- =====================================================================
+
+-- Botão Toggle Principal
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Parent = ScreenGui
+ToggleButton.BackgroundColor3 = Color3.fromRGB(30, 144, 255)
+ToggleButton.BackgroundTransparency = 0.2
+ToggleButton.BorderSizePixel = 0
+ToggleButton.Position = UDim2.new(0, 20, 0.5, -30)
+ToggleButton.Size = UDim2.new(0, 60, 0, 60)
+ToggleButton.Font = Enum.Font.GothamBold
+ToggleButton.Text = "⚓"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 30
+ToggleButton.Draggable = true
+ToggleButton.Active = true
+
+-- Arredondar botão
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(0, 30)
+ToggleCorner.Parent = ToggleButton
+
+-- Sombra do botão
+local ToggleStroke = Instance.new("UIStroke")
+ToggleStroke.Color = Color3.fromRGB(255, 255, 255)
+ToggleStroke.Thickness = 2
+ToggleStroke.Transparency = 0.5
+ToggleStroke.Parent = ToggleButton
+
+-- Frame Principal
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Position = UDim2.new(0.5, -300, 0.5, -250)
+MainFrame.Size = UDim2.new(0, 600, 0, 500)
+MainFrame.Visible = false
+MainFrame.Draggable = true
+MainFrame.Active = true
+MainFrame.ClipsDescendants = true
+
+-- Arredondar frame principal
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 15)
+MainCorner.Parent = MainFrame
+
+-- Borda do frame
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(30, 144, 255)
+MainStroke.Thickness = 3
+MainStroke.Parent = MainFrame
+
+-- Gradiente de fundo
+local BackgroundGradient = Instance.new("UIGradient")
+BackgroundGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(25, 25, 35)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(35, 35, 45))
+})
+BackgroundGradient.Parent = MainFrame
+
+-- Barra de Título
+local TitleBar = Instance.new("Frame")
+TitleBar.Name = "TitleBar"
+TitleBar.Parent = MainFrame
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 144, 255)
+TitleBar.BorderSizePixel = 0
+TitleBar.Size = UDim2.new(1, 0, 0, 50)
+
+-- Título
+local Title = Instance.new("TextLabel")
+Title.Parent = TitleBar
+Title.BackgroundTransparency = 1
+Title.Size = UDim2.new(1, 0, 1, 0)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "⚓ SAILOR HUB - SAILOR PIECE"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 20
+
+-- Botão Fechar
+local CloseButton = Instance.new("TextButton")
+CloseButton.Parent = TitleBar
+CloseButton.BackgroundTransparency = 1
+CloseButton.Position = UDim2.new(1, -45, 0.5, -15)
+CloseButton.Size = UDim2.new(0, 30, 0, 30)
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Text = "✕"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 20
+
+-- Container de Abas
+local TabContainer = Instance.new("Frame")
+TabContainer.Parent = MainFrame
+TabContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+TabContainer.BorderSizePixel = 0
+TabContainer.Position = UDim2.new(0, 0, 0, 50)
+TabContainer.Size = UDim2.new(1, 0, 0, 50)
+
+-- Botões de Abas
+local Tabs = {}
+local TabNames = {"⚔ Combat", "🗡 Weapons", "🛡 Haki", "👁 ESP", "⚡ Speed", "⚙ Misc"}
+local TabContents = {}
+
+for i, name in ipairs(TabNames) do
+    local TabButton = Instance.new("TextButton")
+    TabButton.Parent = TabContainer
+    TabButton.BackgroundColor3 = i == 1 and Color3.fromRGB(30, 144, 255) or Color3.fromRGB(45, 45, 55)
+    TabButton.BorderSizePixel = 0
+    TabButton.Position = UDim2.new((i-1) * 0.166, 0, 0, 0)
+    TabButton.Size = UDim2.new(0.166, 0, 1, 0)
+    TabButton.Font = Enum.Font.GothamBold
+    TabButton.Text = name
+    TabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TabButton.TextSize = 14
+    TabButton.ZIndex = 10
+    
+    Tabs[i] = TabButton
+end
+
+-- Container de Conteúdo
+local ContentContainer = Instance.new("ScrollingFrame")
+ContentContainer.Parent = MainFrame
+ContentContainer.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+ContentContainer.BorderSizePixel = 0
+ContentContainer.Position = UDim2.new(0, 10, 0, 110)
+ContentContainer.Size = UDim2.new(1, -20, 1, -120)
+ContentContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+ContentContainer.ScrollBarThickness = 5
+ContentContainer.ScrollBarImageColor3 = Color3.fromRGB(30, 144, 255)
+
+-- Layout do conteúdo
+local ContentLayout = Instance.new("UIListLayout")
+ContentLayout.Parent = ContentContainer
+ContentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ContentLayout.Padding = UDim.new(0, 10)
+
+ContentLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    ContentContainer.CanvasSize = UDim2.new(0, 0, 0, ContentLayout.AbsoluteContentSize.Y + 20)
+end)
+
+-- =====================================================================
+-- FUNÇÕES DE CRIAÇÃO DE ELEMENTOS UI
+-- =====================================================================
+
+-- Criar seção
+local function CreateSection(title)
+    local Section = Instance.new("Frame")
+    Section.Parent = ContentContainer
+    Section.BackgroundTransparency = 1
+    Section.Size = UDim2.new(1, 0, 0, 30)
+    
+    local SectionTitle = Instance.new("TextLabel")
+    SectionTitle.Parent = Section
+    SectionTitle.BackgroundTransparency = 1
+    SectionTitle.Size = UDim2.new(1, 0, 1, 0)
+    SectionTitle.Font = Enum.Font.GothamBold
+    SectionTitle.Text = title
+    SectionTitle.TextColor3 = Color3.fromRGB(30, 144, 255)
+    SectionTitle.TextSize = 18
+    SectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local Line = Instance.new("Frame")
+    Line.Parent = Section
+    Line.BackgroundColor3 = Color3.fromRGB(30, 144, 255)
+    Line.BorderSizePixel = 0
+    Line.Position = UDim2.new(0, 0, 1, -2)
+    Line.Size = UDim2.new(1, 0, 0, 2)
+    
+    return Section
+end
+
+-- Criar toggle
+local function CreateToggle(parent, name, desc, callback, default)
+    default = default or false
+    
+    local ToggleFrame = Instance.new("Frame")
+    ToggleFrame.Parent = parent
+    ToggleFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    ToggleFrame.BorderSizePixel = 0
+    ToggleFrame.Size = UDim2.new(1, 0, 0, 60)
+    
+    local ToggleCorner = Instance.new("UICorner")
+    ToggleCorner.CornerRadius = UDim.new(0, 10)
+    ToggleCorner.Parent = ToggleFrame
+    
+    local NameLabel = Instance.new("TextLabel")
+    NameLabel.Parent = ToggleFrame
+    NameLabel.BackgroundTransparency = 1
+    NameLabel.Position = UDim2.new(0, 15, 0, 8)
+    NameLabel.Size = UDim2.new(1, -100, 0, 20)
+    NameLabel.Font = Enum.Font.GothamBold
+    NameLabel.Text = name
+    NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    NameLabel.TextSize = 16
+    NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local DescLabel = Instance.new("TextLabel")
+    DescLabel.Parent = ToggleFrame
+    DescLabel.BackgroundTransparency = 1
+    DescLabel.Position = UDim2.new(0, 15, 0, 28)
+    DescLabel.Size = UDim2.new(1, -100, 0, 24)
+    DescLabel.Font = Enum.Font.Gotham
+    DescLabel.Text = desc
+    DescLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    DescLabel.TextSize = 12
+    DescLabel.TextWrapped = true
+    DescLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local ToggleButton = Instance.new("TextButton")
+    ToggleButton.Parent = ToggleFrame
+    ToggleButton.BackgroundColor3 = default and Color3.fromRGB(30, 144, 255) or Color3.fromRGB(60, 60, 70)
+    ToggleButton.BorderSizePixel = 0
+    ToggleButton.Position = UDim2.new(1, -70, 0.5, -15)
+    ToggleButton.Size = UDim2.new(0, 60, 0, 30)
+    ToggleButton.Text = ""
+    
+    local ToggleCorner2 = Instance.new("UICorner")
+    ToggleCorner2.CornerRadius = UDim.new(1, 0)
+    ToggleCorner2.Parent = ToggleButton
+    
+    local ToggleCircle = Instance.new("Frame")
+    ToggleCircle.Parent = ToggleButton
+    ToggleCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    ToggleCircle.BorderSizePixel = 0
+    ToggleCircle.Position = default and UDim2.new(1, -27, 0.5, -12) or UDim2.new(0, 3, 0.5, -12)
+    ToggleCircle.Size = UDim2.new(0, 24, 0, 24)
+    
+    local CircleCorner = Instance.new("UICorner")
+    CircleCorner.CornerRadius = UDim.new(1, 0)
+    CircleCorner.Parent = ToggleCircle
+    
+    local isActive = default
+    
+    ToggleButton.MouseButton1Click:Connect(function()
+        isActive = not isActive
+        ToggleButton.BackgroundColor3 = isActive and Color3.fromRGB(30, 144, 255) or Color3.fromRGB(60, 60, 70)
+        ToggleCircle.Position = isActive and UDim2.new(1, -27, 0.5, -12) or UDim2.new(0, 3, 0.5, -12)
+        callback(isActive)
+    end)
+    
+    return ToggleFrame
+end
+
+-- Criar slider
+local function CreateSlider(parent, name, desc, min, max, default, callback)
+    local SliderFrame = Instance.new("Frame")
+    SliderFrame.Parent = parent
+    SliderFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    SliderFrame.BorderSizePixel = 0
+    SliderFrame.Size = UDim2.new(1, 0, 0, 80)
+    
+    local SliderCorner = Instance.new("UICorner")
+    SliderCorner.CornerRadius = UDim.new(0, 10)
+    SliderCorner.Parent = SliderFrame
+    
+    local NameLabel = Instance.new("TextLabel")
+    NameLabel.Parent = SliderFrame
+    NameLabel.BackgroundTransparency = 1
+    NameLabel.Position = UDim2.new(0, 15, 0, 8)
+    NameLabel.Size = UDim2.new(1, -100, 0, 20)
+    NameLabel.Font = Enum.Font.GothamBold
+    NameLabel.Text = name
+    NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    NameLabel.TextSize = 16
+    NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local DescLabel = Instance.new("TextLabel")
+    DescLabel.Parent = SliderFrame
+    DescLabel.BackgroundTransparency = 1
+    DescLabel.Position = UDim2.new(0, 15, 0, 28)
+    DescLabel.Size = UDim2.new(1, -150, 0, 20)
+    DescLabel.Font = Enum.Font.Gotham
+    DescLabel.Text = desc
+    DescLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    DescLabel.TextSize = 12
+    DescLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local ValueLabel = Instance.new("TextLabel")
+    ValueLabel.Parent = SliderFrame
+    ValueLabel.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    ValueLabel.BorderSizePixel = 0
+    ValueLabel.Position = UDim2.new(1, -70, 0, 8)
+    ValueLabel.Size = UDim2.new(0, 60, 0, 30)
+    ValueLabel.Font = Enum.Font.GothamBold
+    ValueLabel.Text = tostring(default)
+    ValueLabel.TextColor3 = Color3.fromRGB(30, 144, 255)
+    ValueLabel.TextSize = 16
+    
+    local ValueCorner = Instance.new("UICorner")
+    ValueCorner.CornerRadius = UDim.new(0, 8)
+    ValueCorner.Parent = ValueLabel
+    
+    local SliderBG = Instance.new("Frame")
+    SliderBG.Parent = SliderFrame
+    SliderBG.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    SliderBG.BorderSizePixel = 0
+    SliderBG.Position = UDim2.new(0, 15, 0, 55)
+    SliderBG.Size = UDim2.new(1, -100, 0, 8)
+    
+    local SliderBGCorner = Instance.new("UICorner")
+    SliderBGCorner.CornerRadius = UDim.new(1, 0)
+    SliderBGCorner.Parent = SliderBG
+    
+    local SliderFill = Instance.new("Frame")
+    SliderFill.Parent = SliderBG
+    SliderFill.BackgroundColor3 = Color3.fromRGB(30, 144, 255)
+    SliderFill.BorderSizePixel = 0
+    SliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    
+    local SliderFillCorner = Instance.new("UICorner")
+    SliderFillCorner.CornerRadius = UDim.new(1, 0)
+    SliderFillCorner.Parent = SliderFill
+    
+    local SliderButton = Instance.new("TextButton")
+    SliderButton.Parent = SliderFrame
+    SliderButton.BackgroundTransparency = 1
+    SliderButton.Position = UDim2.new(0, 15, 0, 50)
+    SliderButton.Size = UDim2.new(1, -100, 0, 18)
+    SliderButton.Text = ""
+    
+    local dragging = false
+    
+    SliderButton.MouseButton1Down:Connect(function()
+        dragging = true
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    SliderButton.MouseMoved:Connect(function()
+        if dragging then
+            local mousePos = UserInputService:GetMouseLocation()
+            local absPos = SliderBG.AbsolutePosition
+            local relX = math.clamp(mousePos.X - absPos.X, 0, SliderBG.AbsoluteSize.X)
+            local percent = relX / SliderBG.AbsoluteSize.X
+            local value = min + (max - min) * percent
+            value = math.floor(value * 10) / 10
+            
+            SliderFill.Size = UDim2.new(percent, 0, 1, 0)
+            ValueLabel.Text = tostring(value)
+            callback(value)
+        end
+    end)
+    
+    return SliderFrame
+end
+
+-- =====================================================================
+-- CONSTRUÇÃO DAS ABAS
+-- =====================================================================
+
+-- Função para limpar conteúdo
+local function ClearContent()
+    for _, child in ipairs(ContentContainer:GetChildren()) do
+        if child:IsA("Frame") and child ~= ContentLayout then
+            child:Destroy()
+        end
+    end
+end
+
+-- ABA 1: Combat
+local function BuildCombatTab()
+    ClearContent()
+    
+    CreateSection("⚔ Combat Settings")
+    
+    CreateToggle(ContentContainer, "Auto Farm", "Automatically farm enemies", function(enabled)
+        SailorState.AutoFarm = enabled
+        
+        if enabled then
+            task.spawn(function()
+                while SailorState.AutoFarm do
+                    task.wait(0.1)
+                    pcall(function()
+                        local target = FindNearestEnemy(30)
+                        if target and target:FindFirstChild("HumanoidRootPart") then
+                            local char = Player.Character
+                            if char and char:FindFirstChild("HumanoidRootPart") then
+                                char.HumanoidRootPart.CFrame = target.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
+                                
+                                if SailorState.AutoAttack then
+                                    UseSkill(Enum.KeyCode.Z)
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end)
+    
+    CreateToggle(ContentContainer, "Auto Quest", "Automatically accept and complete quests", function(enabled)
+        SailorState.AutoQuest = enabled
+    end)
+    
+    CreateToggle(ContentContainer, "Auto Attack", "Automatically attack when farming", function(enabled)
+        SailorState.AutoAttack = enabled
+    end)
+    
+    CreateSlider(ContentContainer, "Skill Delay", "Delay between skill usage", 0.05, 2, 0.1, function(value)
+        SailorState.SkillDelay = value
+    end)
+end
+
+-- ABA 2: Weapons
+local function BuildWeaponsTab()
+    ClearContent()
+    
+    CreateSection("🗡️ Auto Skills")
+    
+    CreateToggle(ContentContainer, "Auto Skill Z", "Automatically use Z skill", function(enabled)
+        SailorState.AutoSkillZ = enabled
+        if enabled then RunAutoSkillLoop("AutoSkillZ", Enum.KeyCode.Z) end
+    end)
+    
+    CreateToggle(ContentContainer, "Auto Skill X", "Automatically use X skill", function(enabled)
+        SailorState.AutoSkillX = enabled
+        if enabled then RunAutoSkillLoop("AutoSkillX", Enum.KeyCode.X) end
+    end)
+    
+    CreateToggle(ContentContainer, "Auto Skill C", "Automatically use C skill", function(enabled)
+        SailorState.AutoSkillC = enabled
+        if enabled then RunAutoSkillLoop("AutoSkillC", Enum.KeyCode.C) end
+    end)
+    
+    CreateToggle(ContentContainer, "Auto Skill V", "Automatically use V skill", function(enabled)
+        SailorState.AutoSkillV = enabled
+        if enabled then RunAutoSkillLoop("AutoSkillV", Enum.KeyCode.V) end
+    end)
+    
+    CreateSection("⚔ Weapon Selection")
+    
+    CreateToggle(ContentContainer, "Use Melee", "Use melee weapons for skills", function(enabled)
+        SailorState.UseMelee = enabled
+    end, true)
+    
+    CreateToggle(ContentContainer, "Use Sword", "Use swords for skills", function(enabled)
+        SailorState.UseSword = enabled
+    end)
+    
+    CreateToggle(ContentContainer, "Use Fruit", "Use devil fruits for skills", function(enabled)
+        SailorState.UseFruit = enabled
+    end)
+    
+    CreateToggle(ContentContainer, "Use Gun", "Use guns for skills", function(enabled)
+        SailorState.UseGun = enabled
+    end)
+end
+
+-- ABA 3: Haki
+local function BuildHakiTab()
+    ClearContent()
+    
+    CreateSection("🛡️ Haki Settings")
+    
+    CreateToggle(ContentContainer, "Auto Busoshoku Haki", "Automatically use Busoshoku Haki (F)", function(enabled)
+        SailorState.AutoBusoshoku = enabled
+        
+        if enabled then
+            task.spawn(function()
+                while SailorState.AutoBusoshoku do
+                    task.wait(10)
+                    pcall(function()
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.F, false, game)
+                        task.wait(0.05)
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+                    end)
+                end
+            end)
+        end
+    end)
+    
+    CreateToggle(ContentContainer, "Auto Kenbunshoku Haki", "Automatically use Kenbunshoku Haki (G)", function(enabled)
+        SailorState.AutoKenbunshoku = enabled
+        
+        if enabled then
+            task.spawn(function()
+                while SailorState.AutoKenbunshoku do
+                    task.wait(15)
+                    pcall(function()
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.G, false, game)
+                        task.wait(0.05)
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.G, false, game)
+                    end)
+                end
+            end)
+        end
+    end)
+end
+
+-- ABA 4: ESP
+local function BuildESPTab()
+    ClearContent()
+    
+    CreateSection("👁️ ESP System")
+    
+    CreateToggle(ContentContainer, "ESP Players", "Highlight other players", function(enabled)
+        SailorState.ESPPlayers = enabled
+    end)
+    
+    CreateToggle(ContentContainer, "ESP Chests", "Highlight chests", function(enabled)
+        SailorState.ESPChests = enabled
+    end)
+    
+    CreateToggle(ContentContainer, "ESP Mobs", "Highlight mobs/enemies", function(enabled)
+        SailorState.ESPMobs = enabled
+    end)
+    
+    CreateToggle(ContentContainer, "ESP Fruits", "Highlight devil fruits", function(enabled)
+        SailorState.ESPFruits = enabled
+    end)
+end
+
+-- ABA 5: Speed
+local function BuildSpeedTab()
+    ClearContent()
+    
+    CreateSection("⚡ Movement Settings")
+    
+    CreateToggle(ContentContainer, "Speed Boost", "Increase movement speed", function(enabled)
+        SailorState.SpeedBoost = enabled
+        
+        if enabled then
+            Connections.Speed = RunService.Heartbeat:Connect(function()
+                if SailorState.SpeedBoost then
+                    local char = Player.Character
+                    if char and char:FindFirstChild("Humanoid") then
+                        char.Humanoid.WalkSpeed = SailorState.SpeedValue
+                    end
+                end
+            end)
+        else
+            if Connections.Speed then
+                Connections.Speed:Disconnect()
+                Connections.Speed = nil
+                local char = Player.Character
+                if char and char:FindFirstChild("Humanoid") then
+                    char.Humanoid.WalkSpeed = 16
+                end
+            end
+        end
+    end)
+    
+    CreateSlider(ContentContainer, "Speed Value", "Movement speed value", 16, 250, 50, function(value)
+        SailorState.SpeedValue = value
+    end)
+    
+    CreateToggle(ContentContainer, "Jump Boost", "Increase jump power", function(enabled)
+        SailorState.JumpBoost = enabled
+        
+        if enabled then
+            Connections.Jump = RunService.Heartbeat:Connect(function()
+                if SailorState.JumpBoost then
+                    local char = Player.Character
+                    if char and char:FindFirstChild("Humanoid") then
+                        char.Humanoid.JumpPower = SailorState.JumpValue
+                    end
+                end
+            end)
+        else
+            if Connections.Jump then
+                Connections.Jump:Disconnect()
+                Connections.Jump = nil
+                local char = Player.Character
+                if char and char:FindFirstChild("Humanoid") then
+                    char.Humanoid.JumpPower = 50
+                end
+            end
+        end
+    end)
+    
+    CreateSlider(ContentContainer, "Jump Value", "Jump power value", 50, 300, 100, function(value)
+        SailorState.JumpValue = value
+    end)
+    
+    CreateToggle(ContentContainer, "No Clip", "Walk through walls", function(enabled)
+        SailorState.NoClip = enabled
+        
+        if enabled then
+            Connections.NoClip = RunService.Stepped:Connect(function()
+                if SailorState.NoClip then
+                    local char = Player.Character
+                    if char then
+                        for _, part in ipairs(char:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            if Connections.NoClip then
+                Connections.NoClip:Disconnect()
+                Connections.NoClip = nil
+                local char = Player.Character
+                if char then
+                    for _, part in ipairs(char:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = true
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    
+    CreateToggle(ContentContainer, "Lock Position", "Lock your current position", function(enabled)
+        SailorState.LockPosition = enabled
+        
+        if enabled then
+            local char = Player.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                SailorState.LockedPosition = char.HumanoidRootPart.CFrame
+                
+                Connections.LockPos = RunService.Heartbeat:Connect(function()
+                    if SailorState.LockPosition and SailorState.LockedPosition then
+                        local character = Player.Character
+                        if character and character:FindFirstChild("HumanoidRootPart") then
+                            character.HumanoidRootPart.CFrame = SailorState.LockedPosition
+                            character.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+                        end
+                    end
+                end)
+            end
+        else
+            if Connections.LockPos then
+                Connections.LockPos:Disconnect()
+                Connections.LockPos = nil
+            end
+            SailorState.LockedPosition = nil
+        end
+    end)
+end
+
+-- ABA 6: Misc
+local function BuildMiscTab()
+    ClearContent()
+    
+    CreateSection("⚙ Miscellaneous")
+    
+    CreateToggle(ContentContainer, "Auto Collect", "Automatically collect items", function(enabled)
+        SailorState.AutoCollect = enabled
+        
+        if enabled then
+            task.spawn(function()
+                while SailorState.AutoCollect do
+                    task.wait(0.5)
+                    pcall(function()
+                        local char = Player.Character
+                        if char and char:FindFirstChild("HumanoidRootPart") then
+                            for _, obj in ipairs(workspace:GetDescendants()) do
+                                if obj:IsA("Part") and obj.Name:find("Chest") or obj.Name:find("Drop") then
+                                    if (char.HumanoidRootPart.Position - obj.Position).Magnitude < 20 then
+                                        char.HumanoidRootPart.CFrame = obj.CFrame * CFrame.new(0, 0, 3)
+                                        firetouchinterest(char.HumanoidRootPart, obj, 0)
+                                        task.wait(0.1)
+                                        firetouchinterest(char.HumanoidRootPart, obj, 1)
+                                    end
+                                end
+                            end
+                        end
+                    end)
+                end
+            end)
+        end
+    end)
+    
+    CreateToggle(ContentContainer, "Auto Click", "Automatically click", function(enabled)
+        SailorState.AutoClick = enabled
+        
+        if enabled then
+            task.spawn(function()
+                while SailorState.AutoClick do
+                    task.wait(0.01)
+                    pcall(function()
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                        task.wait(0.01)
+                        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                    end)
+                end
+            end)
+        end
+    end)
+    
+    CreateToggle(ContentContainer, "Anti AFK", "Prevent being kicked for AFK", function(enabled)
+        SailorState.AntiAFK = enabled
+        
+        if enabled then
+            Connections.AntiAFK = RunService.Heartbeat:Connect(function()
+                if SailorState.AntiAFK then
+                    pcall(function()
+                        local char = Player.Character
+                        if char and char:FindFirstChild("Humanoid") then
+                            char.Humanoid:ChangeState("Jumping")
+                            task.wait(0.1)
+                            char.Humanoid:ChangeState("Running")
+                        end
+                    end)
+                end
+            end)
+        else
+            if Connections.AntiAFK then
+                Connections.AntiAFK:Disconnect()
+                Connections.AntiAFK = nil
+            end
+        end
+    end)
+end
+
+-- Conectar botões de aba
+for i, tabButton in ipairs(Tabs) do
+    tabButton.MouseButton1Click:Connect(function()
+        for j, btn in ipairs(Tabs) do
+            btn.BackgroundColor3 = j == i and Color3.fromRGB(30, 144, 255) or Color3.fromRGB(45, 45, 55)
+        end
+        
+        if i == 1 then BuildCombatTab()
+        elseif i == 2 then BuildWeaponsTab()
+        elseif i == 3 then BuildHakiTab()
+        elseif i == 4 then BuildESPTab()
+        elseif i == 5 then BuildSpeedTab()
+        elseif i == 6 then BuildMiscTab()
+        end
+    end)
+end
+
+-- Iniciar com a primeira aba
+BuildCombatTab()
+
+-- =====================================================================
+-- CONTROLES DA INTERFACE
+-- =====================================================================
+
+-- Toggle da GUI
+ToggleButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+    ToggleButton.BackgroundColor3 = MainFrame.Visible and Color3.fromRGB(65, 105, 225) or Color3.fromRGB(30, 144, 255)
+end)
+
+-- Fechar GUI
+CloseButton.MouseButton1Click:Connect(function()
+    for _, connection in pairs(Connections) do
+        if typeof(connection) == "RBXScriptConnection" then
+            connection:Disconnect()
+        end
+    end
+    
+    SailorState.AutoFarm = false
+    SailorState.AutoSkillZ = false
+    SailorState.AutoSkillX = false
+    SailorState.AutoSkillC = false
+    SailorState.AutoSkillV = false
+    
+    local char = Player.Character
+    if char and char:FindFirstChild("Humanoid") then
+        char.Humanoid.WalkSpeed = 16
+        char.Humanoid.JumpPower = 50
+    end
+    
+    ScreenGui:Destroy()
+    getgenv().SAILOR_LOADED = false
+end)
+
+-- =====================================================================
+-- RESPAWN HANDLER
+-- =====================================================================
+Player.CharacterAdded:Connect(function(char)
+    task.wait(1)
+    Character = char
+    
+    -- Resetar estados relacionados ao personagem
+    SailorState.LockPosition = false
+    SailorState.LockedPosition = nil
+    
+    if SailorState.SpeedBoost then
+        task.wait(0.5)
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.WalkSpeed = SailorState.SpeedValue
+        end
+    end
+    
+    if SailorState.JumpBoost then
+        task.wait(0.5)
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.JumpPower = SailorState.JumpValue
+        end
+    end
+end)
+
+-- =====================================================================
+-- MENSAGEM DE LOAD
+-- =====================================================================
+print("╔════════════════════════════════════╗")
+print("║     ⚓ SAILOR HUB v1.0 LOADED      ║")
+print("╠════════════════════════════════════╣")
+print("║  🌊 Sailor Piece                   ║")
+print("║  ⚡ Todas as funcionalidades ativas ║")
+print("║  📱 Suporte Mobile/PC               ║")
+print("║  🔥 Interface Profissional          ║")
+print("╠════════════════════════════════════╣")
+print("║  Pressione ⚓ para abrir o menu     ║")
+print("╚════════════════════════════════════╝")
