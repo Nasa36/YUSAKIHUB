@@ -1,5 +1,5 @@
--- ⚓ SAILOR PRO v2.0 - Sailor Piece
--- Versão com remotes específicos: RequestAbility, HakiRemote, ObservationHakiRemote
+-- ⚓ SAILOR PRO v3.0 - Sailor Piece
+-- Versão com AutoSkill corrigido, Speed System e Haki Monitor
 
 if getgenv().SAILOR_PRO_LOADED then
     warn("SAILOR PRO já está em execução!")
@@ -18,20 +18,21 @@ local Player = Players.LocalPlayer
 
 -- Estado do Hub
 local SailorState = {
-    -- Auto Skills (RequestAbility)
+    -- Auto Skills
     AutoSkillZ = false,
     AutoSkillX = false,
     AutoSkillC = false,
     AutoSkillV = false,
     SkillDelay = 0.1,
     
-    -- Auto Haki (HakiRemote / ObservationHakiRemote)
+    -- Auto Haki
     AutoBusoshoku = false,
     AutoKenbunshoku = false,
+    HakiCheckInterval = 3, -- Verifica a cada 3 segundos
     
-    -- Boss System
-    AutoKillBoss = false,
-    SelectedBoss = nil,
+    -- Speed System
+    SpeedBoost = false,
+    SpeedValue = 50,
     
     -- Weapon Selection
     UseMelee = true,
@@ -41,6 +42,10 @@ local SailorState = {
 
 -- Conexões
 local Connections = {}
+local HakiStatus = {
+    BusoshokuActive = false,
+    KenbunshokuActive = false
+}
 
 -- Criar GUI
 local ScreenGui = Instance.new("ScreenGui")
@@ -59,184 +64,137 @@ else
 end
 
 -- =====================================================================
--- FUNÇÕES ESPECÍFICAS COM OS REMOTES FORNECIDOS
+-- FUNÇÕES ESPECÍFICAS
 -- =====================================================================
 
--- Função para usar skill via RequestAbility
+-- Função para usar skill via RequestAbility (CORRIGIDA)
 local function UseSkill(skillIndex)
-    -- skillIndex: 1 = Z, 2 = X, 3 = C, 4 = V (provavelmente)
-    pcall(function()
-        -- Usando exatamente o remote que você forneceu
-        local args = {
-            [1] = skillIndex
-        }
+    -- skillIndex: 1 = Z, 2 = X, 3 = C, 4 = V
+    local success = pcall(function()
+        -- Garantir que os objetos existem
+        local remoteEvents = ReplicatedStorage:FindFirstChild("RemoteEvents")
+        if not remoteEvents then
+            return false
+        end
         
-        ReplicatedStorage:WaitForChild("RemoteEvents", 9e9):WaitForChild("RequestAbility", 9e9):FireServer(unpack(args))
+        local requestAbility = remoteEvents:FindFirstChild("RequestAbility")
+        if not requestAbility then
+            return false
+        end
+        
+        -- Criar args no formato correto
+        local args = { [1] = skillIndex }
+        requestAbility:FireServer(unpack(args))
+        return true
     end)
+    
+    return success
 end
 
 -- Função para ativar Busoshoku Haki
 local function ActivateBusoshoku()
     pcall(function()
-        -- Usando exatamente o remote que você forneceu
-        local args = {
-            [1] = "Toggle"
-        }
+        local remoteEvents = ReplicatedStorage:FindFirstChild("RemoteEvents")
+        if not remoteEvents then return end
         
-        ReplicatedStorage:WaitForChild("RemoteEvents", 9e9):WaitForChild("HakiRemote", 9e9):FireServer(unpack(args))
+        local hakiRemote = remoteEvents:FindFirstChild("HakiRemote")
+        if not hakiRemote then return end
+        
+        local args = { [1] = "Toggle" }
+        hakiRemote:FireServer(unpack(args))
     end)
 end
 
 -- Função para ativar Kenbunshoku Haki
 local function ActivateKenbunshoku()
     pcall(function()
-        -- Usando exatamente o remote que você forneceu
-        local args = {
-            [1] = "Toggle"
-        }
+        local remoteEvents = ReplicatedStorage:FindFirstChild("RemoteEvents")
+        if not remoteEvents then return end
         
-        ReplicatedStorage:WaitForChild("RemoteEvents", 9e9):WaitForChild("ObservationHakiRemote", 9e9):FireServer(unpack(args))
-    end)
-end
-
--- Função para spawnar boss
-local function SpawnBoss(bossName)
-    pcall(function()
-        local summonNPC = Workspace:FindFirstChild("ServiceNPCs") and 
-                         Workspace.ServiceNPCs:FindFirstChild("SummonBossNPC")
+        local observationRemote = remoteEvents:FindFirstChild("ObservationHakiRemote")
+        if not observationRemote then return end
         
-        if summonNPC and summonNPC:FindFirstChild("HumanoidRootPart") then
-            local prompt = summonNPC.HumanoidRootPart:FindFirstChild("SummonPrompt")
-            
-            if prompt and prompt:IsA("ProximityPrompt") then
-                local char = Player.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    char.HumanoidRootPart.CFrame = summonNPC.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
-                    task.wait(0.5)
-                    prompt:InputHoldBegin()
-                    task.wait(1)
-                    prompt:InputHoldEnd()
-                    
-                    -- Se tiver remote de seleção de boss
-                    local selectRemote = ReplicatedStorage:FindFirstChild("RemoteEvents") and 
-                                        ReplicatedStorage.RemoteEvents:FindFirstChild("SelectBossRemote")
-                    if selectRemote and bossName then
-                        selectRemote:FireServer(bossName)
-                    end
-                end
-            end
-        end
+        local args = { [1] = "Toggle" }
+        observationRemote:FireServer(unpack(args))
     end)
 end
 
--- Função para encontrar bosses vivos
-local function FindActiveBosses()
-    local bosses = {}
-    pcall(function()
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
-                local humanoid = obj:FindFirstChildOfClass("Humanoid")
-                if humanoid and humanoid.Health > 0 then
-                    local name = obj.Name:lower()
-                    if name:find("boss") or name:find("king") or name:find("raid") or name:find("enel") or 
-                       name:find("mihawk") or name:find("kaido") or name:find("big mom") or name:find("shanks") then
-                        table.insert(bosses, obj)
-                    end
-                end
-            end
-        end
-    end)
-    return bosses
-end
-
--- Função para matar boss
-local function KillBoss(boss)
-    if not boss then return end
-    
+-- Função para verificar status do Haki (adaptar conforme o jogo)
+local function CheckHakiStatus()
     pcall(function()
         local char = Player.Character
-        if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+        if not char then return end
         
-        local bossHRP = boss:FindFirstChild("HumanoidRootPart")
-        local bossHumanoid = boss:FindFirstChildOfClass("Humanoid")
+        -- Tenta detectar se Haki está ativo por efeitos visuais ou atributos
+        -- Isso pode variar por jogo, então é uma estimativa
+        local busoshokuActive = false
+        local kenbunshokuActive = false
         
-        if bossHRP and bossHumanoid and bossHumanoid.Health > 0 then
-            char.HumanoidRootPart.CFrame = bossHRP.CFrame * CFrame.new(0, 0, 8)
-            
-            if SailorState.AutoSkillZ then
-                UseSkill(1) -- RequestAbility com index 1 (Z)
-            end
-            if SailorState.AutoSkillX then
-                task.wait(0.1)
-                UseSkill(2) -- RequestAbility com index 2 (X)
-            end
-            if SailorState.AutoSkillC then
-                task.wait(0.1)
-                UseSkill(3) -- RequestAbility com index 3 (C)
-            end
-            if SailorState.AutoSkillV then
-                task.wait(0.1)
-                UseSkill(4) -- RequestAbility com index 4 (V)
+        -- Verifica por efeitos de Haki (exemplo: partes do corpo brilhando)
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("Part") or part:IsA("MeshPart") then
+                -- Busoshoku geralmente deixa partes escuras/roxas
+                if part.BrickColor == BrickColor.new("Really black") or 
+                   part.BrickColor == BrickColor.new("Royal purple") then
+                    busoshokuActive = true
+                end
             end
         end
+        
+        -- Verifica por atributos ou valores (se existirem)
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            -- Alguns jogos usam atributos para Haki
+            local busoAttr = humanoid:GetAttribute("Busoshoku")
+            local kenAttr = humanoid:GetAttribute("Kenbunshoku")
+            
+            if busoAttr ~= nil then
+                busoshokuActive = busoAttr
+            end
+            
+            if kenAttr ~= nil then
+                kenbunshokuActive = kenAttr
+            end
+        end
+        
+        HakiStatus.BusoshokuActive = busoshokuActive
+        HakiStatus.KenbunshokuActive = kenbunshokuActive
     end)
 end
 
--- Função para encontrar ferramentas
+-- Função para encontrar ferramentas (otimizada)
 local function FindTool(weaponType)
     local char = Player.Character
     if not char then return nil end
     local backpack = Player.Backpack
     
-    if weaponType == "Melee" then
-        for _, item in ipairs(backpack:GetChildren()) do
-            if item:IsA("Tool") then
-                local lowName = item.Name:lower()
-                if lowName:find("combat") or lowName:find("melee") or lowName:find("soco") or lowName:find("fist") then
+    local searchTerms = {
+        Melee = {"combat", "melee", "soco", "fist", "punch", "kick"},
+        Sword = {"sword", "katana", "blade", "cutlass", "saber", "espada", "lâmina"},
+        Fruit = {"fruit", "gomu", "mera", "power", "devil", "akuma", "fruta"}
+    }
+    
+    local terms = searchTerms[weaponType]
+    if not terms then return nil end
+    
+    -- Procura no inventário
+    for _, item in ipairs(backpack:GetChildren()) do
+        if item:IsA("Tool") then
+            local lowName = item.Name:lower()
+            for _, term in ipairs(terms) do
+                if lowName:find(term) then
                     return item
                 end
             end
         end
-        for _, item in ipairs(char:GetChildren()) do
-            if item:IsA("Tool") then
-                local lowName = item.Name:lower()
-                if lowName:find("combat") or lowName:find("melee") or lowName:find("soco") or lowName:find("fist") then
-                    return item
-                end
-            end
-        end
-        
-    elseif weaponType == "Sword" then
-        for _, item in ipairs(backpack:GetChildren()) do
-            if item:IsA("Tool") then
-                local lowName = item.Name:lower()
-                if lowName:find("sword") or lowName:find("katana") or lowName:find("blade") or lowName:find("cutlass") or lowName:find("saber") then
-                    return item
-                end
-            end
-        end
-        for _, item in ipairs(char:GetChildren()) do
-            if item:IsA("Tool") then
-                local lowName = item.Name:lower()
-                if lowName:find("sword") or lowName:find("katana") or lowName:find("blade") or lowName:find("cutlass") or lowName:find("saber") then
-                    return item
-                end
-            end
-        end
-        
-    elseif weaponType == "Fruit" then
-        for _, item in ipairs(backpack:GetChildren()) do
-            if item:IsA("Tool") then
-                local lowName = item.Name:lower()
-                if lowName:find("fruit") or lowName:find("gomu") or lowName:find("mera") or lowName:find("power") or lowName:find("devil") then
-                    return item
-                end
-            end
-        end
-        for _, item in ipairs(char:GetChildren()) do
-            if item:IsA("Tool") then
-                local lowName = item.Name:lower()
-                if lowName:find("fruit") or lowName:find("gomu") or lowName:find("mera") or lowName:find("power") or lowName:find("devil") then
+    end
+    
+    -- Procura no personagem
+    for _, item in ipairs(char:GetChildren()) do
+        if item:IsA("Tool") then
+            local lowName = item.Name:lower()
+            for _, term in ipairs(terms) do
+                if lowName:find(term) then
                     return item
                 end
             end
@@ -258,38 +216,45 @@ local function EquipWeapon(weaponType)
     
     if tool.Parent ~= char then
         humanoid:EquipTool(tool)
+        task.wait(0.1) -- Pequeno delay para equipar
     end
     
     return true
 end
 
--- Loop de AutoSkill usando RequestAbility
-local function RunAutoSkillLoop(stateKey, skillIndex)
+-- Loop de AutoSkill CORRIGIDO
+local function RunAutoSkillLoop(stateKey, skillIndex, skillName)
     return task.spawn(function()
         while SailorState[stateKey] do
             task.wait(SailorState.SkillDelay)
             
-            pcall(function()
-                if SailorState.UseMelee then
-                    if EquipWeapon("Melee") then
-                        UseSkill(skillIndex)
-                    end
+            local success = false
+            
+            -- Tenta cada arma ativa
+            if SailorState.UseMelee and not success then
+                if EquipWeapon("Melee") then
+                    success = UseSkill(skillIndex)
                 end
-                
-                if SailorState.UseSword then
-                    task.wait(0.05)
-                    if EquipWeapon("Sword") then
-                        UseSkill(skillIndex)
-                    end
+            end
+            
+            if SailorState.UseSword and not success then
+                task.wait(0.05)
+                if EquipWeapon("Sword") then
+                    success = UseSkill(skillIndex)
                 end
-                
-                if SailorState.UseFruit then
-                    task.wait(0.05)
-                    if EquipWeapon("Fruit") then
-                        UseSkill(skillIndex)
-                    end
+            end
+            
+            if SailorState.UseFruit and not success then
+                task.wait(0.05)
+                if EquipWeapon("Fruit") then
+                    success = UseSkill(skillIndex)
                 end
-            end)
+            end
+            
+            -- Se nenhuma arma funcionou, tenta usar skill sem equipar
+            if not success then
+                UseSkill(skillIndex)
+            end
         end
     end)
 end
@@ -325,7 +290,7 @@ MainFrame.Parent = ScreenGui
 MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Position = UDim2.new(0.5, -175, 0.5, -200)
-MainFrame.Size = UDim2.new(0, 350, 0, 400)
+MainFrame.Size = UDim2.new(0, 350, 0, 450) -- Aumentado para acomodar Speed
 MainFrame.Visible = false
 MainFrame.Draggable = true
 MainFrame.Active = true
@@ -353,7 +318,7 @@ Title.Parent = TitleBar
 Title.BackgroundTransparency = 1
 Title.Size = UDim2.new(1, 0, 1, 0)
 Title.Font = Enum.Font.GothamBold
-Title.Text = "⚓ SAILOR PRO v2.0"
+Title.Text = "⚓ SAILOR PRO v3.0"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.TextSize = 18
 
@@ -375,10 +340,9 @@ TabContainer.BorderSizePixel = 0
 TabContainer.Position = UDim2.new(0, 0, 0, 40)
 TabContainer.Size = UDim2.new(1, 0, 0, 40)
 
--- Botões de Abas
+-- Botões de Abas (4 abas)
 local Tabs = {}
-local TabNames = {"⚡ Skills", "🛡️ Haki", "👑 Boss", "⚔ Weapons"}
-local TabContents = {}
+local TabNames = {"⚡ Skills", "🛡️ Haki", "⚡ Speed", "⚔ Weapons"}
 
 for i, name in ipairs(TabNames) do
     local TabButton = Instance.new("TextButton")
@@ -505,7 +469,9 @@ local function CreateToggle(parent, name, callback, default)
     return ToggleFrame
 end
 
-local function CreateSlider(parent, name, min, max, default, callback)
+local function CreateSlider(parent, name, min, max, default, callback, suffix)
+    suffix = suffix or ""
+    
     local SliderFrame = Instance.new("Frame")
     SliderFrame.Parent = parent
     SliderFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
@@ -531,10 +497,10 @@ local function CreateSlider(parent, name, min, max, default, callback)
     ValueLabel.Parent = SliderFrame
     ValueLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     ValueLabel.BorderSizePixel = 0
-    ValueLabel.Position = UDim2.new(1, -45, 0, 8)
-    ValueLabel.Size = UDim2.new(0, 40, 0, 20)
+    ValueLabel.Position = UDim2.new(1, -55, 0, 8)
+    ValueLabel.Size = UDim2.new(0, 50, 0, 20)
     ValueLabel.Font = Enum.Font.GothamBold
-    ValueLabel.Text = tostring(default)
+    ValueLabel.Text = tostring(default) .. suffix
     ValueLabel.TextColor3 = Color3.fromRGB(255, 69, 0)
     ValueLabel.TextSize = 13
     
@@ -547,7 +513,7 @@ local function CreateSlider(parent, name, min, max, default, callback)
     SliderBG.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
     SliderBG.BorderSizePixel = 0
     SliderBG.Position = UDim2.new(0, 10, 0, 35)
-    SliderBG.Size = UDim2.new(1, -60, 0, 6)
+    SliderBG.Size = UDim2.new(1, -70, 0, 6)
     
     local SliderBGCorner = Instance.new("UICorner")
     SliderBGCorner.CornerRadius = UDim.new(1, 0)
@@ -587,61 +553,12 @@ local function CreateSlider(parent, name, min, max, default, callback)
             value = math.floor(value * 10) / 10
             
             SliderFill.Size = UDim2.new(percent, 0, 1, 0)
-            ValueLabel.Text = tostring(value)
+            ValueLabel.Text = tostring(value) .. suffix
             callback(value)
         end
     end)
     
     return SliderFrame
-end
-
-local function CreateBossButton(parent, bossName)
-    local ButtonFrame = Instance.new("Frame")
-    ButtonFrame.Parent = parent
-    ButtonFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    ButtonFrame.BorderSizePixel = 0
-    ButtonFrame.Size = UDim2.new(1, 0, 0, 45)
-    
-    local ButtonCorner = Instance.new("UICorner")
-    ButtonCorner.CornerRadius = UDim.new(0, 6)
-    ButtonCorner.Parent = ButtonFrame
-    
-    local NameLabel = Instance.new("TextLabel")
-    NameLabel.Parent = ButtonFrame
-    NameLabel.BackgroundTransparency = 1
-    NameLabel.Position = UDim2.new(0, 10, 0, 0)
-    NameLabel.Size = UDim2.new(1, -100, 1, 0)
-    NameLabel.Font = Enum.Font.Gotham
-    NameLabel.Text = bossName
-    NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    NameLabel.TextSize = 14
-    NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    
-    local SpawnButton = Instance.new("TextButton")
-    SpawnButton.Parent = ButtonFrame
-    SpawnButton.BackgroundColor3 = Color3.fromRGB(255, 69, 0)
-    SpawnButton.BorderSizePixel = 0
-    SpawnButton.Position = UDim2.new(1, -85, 0.5, -15)
-    SpawnButton.Size = UDim2.new(0, 75, 0, 30)
-    SpawnButton.Font = Enum.Font.GothamBold
-    SpawnButton.Text = "SPAWN"
-    SpawnButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SpawnButton.TextSize = 12
-    
-    local ButtonCorner2 = Instance.new("UICorner")
-    ButtonCorner2.CornerRadius = UDim.new(0, 4)
-    ButtonCorner2.Parent = SpawnButton
-    
-    SpawnButton.MouseButton1Click:Connect(function()
-        SpawnButton.BackgroundColor3 = Color3.fromRGB(34, 139, 34)
-        SpawnButton.Text = "✓"
-        task.wait(0.5)
-        SpawnButton.BackgroundColor3 = Color3.fromRGB(255, 69, 0)
-        SpawnButton.Text = "SPAWN"
-        SpawnBoss(bossName)
-    end)
-    
-    return ButtonFrame
 end
 
 -- =====================================================================
@@ -656,7 +573,7 @@ local function ClearContent()
     end
 end
 
--- Aba Skills (com RequestAbility)
+-- Aba Skills
 local function BuildSkillsTab()
     ClearContent()
     
@@ -664,215 +581,209 @@ local function BuildSkillsTab()
     
     CreateToggle(ContentContainer, "Auto Skill Z (Index 1)", function(enabled)
         SailorState.AutoSkillZ = enabled
-        if enabled then RunAutoSkillLoop("AutoSkillZ", 1) end
+        if enabled then 
+            RunAutoSkillLoop("AutoSkillZ", 1, "Z")
+        end
     end)
     
     CreateToggle(ContentContainer, "Auto Skill X (Index 2)", function(enabled)
         SailorState.AutoSkillX = enabled
-        if enabled then RunAutoSkillLoop("AutoSkillX", 2) end
+        if enabled then 
+            RunAutoSkillLoop("AutoSkillX", 2, "X")
+        end
     end)
     
     CreateToggle(ContentContainer, "Auto Skill C (Index 3)", function(enabled)
         SailorState.AutoSkillC = enabled
-        if enabled then RunAutoSkillLoop("AutoSkillC", 3) end
+        if enabled then 
+            RunAutoSkillLoop("AutoSkillC", 3, "C")
+        end
     end)
     
     CreateToggle(ContentContainer, "Auto Skill V (Index 4)", function(enabled)
         SailorState.AutoSkillV = enabled
-        if enabled then RunAutoSkillLoop("AutoSkillV", 4) end
+        if enabled then 
+            RunAutoSkillLoop("AutoSkillV", 4, "V")
+        end
     end)
     
     CreateSlider(ContentContainer, "Skill Delay", 0.05, 1, 0.1, function(value)
         SailorState.SkillDelay = value
-    end)
+    end, "s")
+    
+    -- Status do Remote
+    local remoteEvents = ReplicatedStorage:FindFirstChild("RemoteEvents")
+    local requestAbility = remoteEvents and remoteEvents:FindFirstChild("RequestAbility")
+    
+    local StatusFrame = Instance.new("Frame")
+    StatusFrame.Parent = ContentContainer
+    StatusFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    StatusFrame.BorderSizePixel = 0
+    StatusFrame.Size = UDim2.new(1, 0, 0, 40)
+    
+    local StatusCorner = Instance.new("UICorner")
+    StatusCorner.CornerRadius = UDim.new(0, 6)
+    StatusCorner.Parent = StatusFrame
+    
+    local StatusText = Instance.new("TextLabel")
+    StatusText.Parent = StatusFrame
+    StatusText.BackgroundTransparency = 1
+    StatusText.Size = UDim2.new(1, -20, 1, 0)
+    StatusText.Position = UDim2.new(0, 10, 0, 0)
+    StatusText.Font = Enum.Font.Gotham
+    StatusText.Text = "RequestAbility: " .. (requestAbility and "✅ ATIVO" or "❌ NÃO ENCONTRADO")
+    StatusText.TextColor3 = requestAbility and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    StatusText.TextSize = 13
+    StatusText.TextXAlignment = Enum.TextXAlignment.Left
 end
 
--- Aba Haki (com HakiRemote e ObservationHakiRemote)
+-- Aba Haki com Monitor
 local function BuildHakiTab()
     ClearContent()
     
-    CreateSection("🛡️ AUTO HAKI (Toggle Remotes)")
+    CreateSection("🛡️ AUTO HAKI COM MONITOR")
     
     CreateToggle(ContentContainer, "Auto Busoshoku Haki", function(enabled)
         SailorState.AutoBusoshoku = enabled
-        
-        if enabled then
-            task.spawn(function()
-                while SailorState.AutoBusoshoku do
-                    task.wait(8)
-                    ActivateBusoshoku() -- Usa HakiRemote com "Toggle"
-                end
-            end)
-        end
     end)
     
     CreateToggle(ContentContainer, "Auto Kenbunshoku Haki", function(enabled)
         SailorState.AutoKenbunshoku = enabled
-        
-        if enabled then
-            task.spawn(function()
-                while SailorState.AutoKenbunshoku do
-                    task.wait(10)
-                    ActivateKenbunshoku() -- Usa ObservationHakiRemote com "Toggle"
-                end
-            end)
-        end
     end)
     
-    -- Status dos remotes
-    local RemoteStatus = Instance.new("Frame")
-    RemoteStatus.Parent = ContentContainer
-    RemoteStatus.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    RemoteStatus.BorderSizePixel = 0
-    RemoteStatus.Size = UDim2.new(1, 0, 0, 70)
+    CreateSlider(ContentContainer, "Check Interval", 1, 10, 3, function(value)
+        SailorState.HakiCheckInterval = value
+    end, "s")
+    
+    -- Status dos Hakis em tempo real
+    local StatusFrame = Instance.new("Frame")
+    StatusFrame.Parent = ContentContainer
+    StatusFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    StatusFrame.BorderSizePixel = 0
+    StatusFrame.Size = UDim2.new(1, 0, 0, 80)
     
     local StatusCorner = Instance.new("UICorner")
     StatusCorner.CornerRadius = UDim.new(0, 6)
-    StatusCorner.Parent = RemoteStatus
+    StatusCorner.Parent = StatusFrame
     
-    local StatusLabel = Instance.new("TextLabel")
-    StatusLabel.Parent = RemoteStatus
-    StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Size = UDim2.new(1, 0, 0.4, 0)
-    StatusLabel.Font = Enum.Font.GothamBold
-    StatusLabel.Text = "REMOTE STATUS"
-    StatusLabel.TextColor3 = Color3.fromRGB(255, 69, 0)
-    StatusLabel.TextSize = 14
+    local Title2 = Instance.new("TextLabel")
+    Title2.Parent = StatusFrame
+    Title2.BackgroundTransparency = 1
+    Title2.Position = UDim2.new(0, 10, 0, 5)
+    Title2.Size = UDim2.new(1, -20, 0, 20)
+    Title2.Font = Enum.Font.GothamBold
+    Title2.Text = "STATUS ATUAL"
+    Title2.TextColor3 = Color3.fromRGB(255, 69, 0)
+    Title2.TextSize = 14
+    Title2.TextXAlignment = Enum.TextXAlignment.Left
     
-    -- Verificar RequestAbility
-    local RequestAbilityExists = pcall(function()
-        return ReplicatedStorage:WaitForChild("RemoteEvents", 1):WaitForChild("RequestAbility", 1) ~= nil
-    end) and "✅ ATIVO" or "❌ NÃO ENCONTRADO"
+    local BusoStatus = Instance.new("TextLabel")
+    BusoStatus.Parent = StatusFrame
+    BusoStatus.BackgroundTransparency = 1
+    BusoStatus.Position = UDim2.new(0, 10, 0, 30)
+    BusoStatus.Size = UDim2.new(1, -20, 0, 20)
+    BusoStatus.Font = Enum.Font.Gotham
+    BusoStatus.Text = "Busoshoku: " .. (HakiStatus.BusoshokuActive and "✅ ATIVO" or "❌ INATIVO")
+    BusoStatus.TextColor3 = HakiStatus.BusoshokuActive and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    BusoStatus.TextSize = 13
+    BusoStatus.TextXAlignment = Enum.TextXAlignment.Left
     
-    -- Verificar HakiRemote
-    local HakiRemoteExists = pcall(function()
-        return ReplicatedStorage:WaitForChild("RemoteEvents", 1):WaitForChild("HakiRemote", 1) ~= nil
-    end) and "✅ ATIVO" or "❌ NÃO ENCONTRADO"
+    local KenStatus = Instance.new("TextLabel")
+    KenStatus.Parent = StatusFrame
+    KenStatus.BackgroundTransparency = 1
+    KenStatus.Position = UDim2.new(0, 10, 0, 50)
+    KenStatus.Size = UDim2.new(1, -20, 0, 20)
+    KenStatus.Font = Enum.Font.Gotham
+    KenStatus.Text = "Kenbunshoku: " .. (HakiStatus.KenbunshokuActive and "✅ ATIVO" or "❌ INATIVO")
+    KenStatus.TextColor3 = HakiStatus.KenbunshokuActive and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    KenStatus.TextSize = 13
+    KenStatus.TextXAlignment = Enum.TextXAlignment.Left
     
-    -- Verificar ObservationHakiRemote
-    local ObservationExists = pcall(function()
-        return ReplicatedStorage:WaitForChild("RemoteEvents", 1):WaitForChild("ObservationHakiRemote", 1) ~= nil
-    end) and "✅ ATIVO" or "❌ NÃO ENCONTRADO"
-    
-    local ReqStatus = Instance.new("TextLabel")
-    ReqStatus.Parent = RemoteStatus
-    ReqStatus.BackgroundTransparency = 1
-    ReqStatus.Position = UDim2.new(0, 10, 0, 20)
-    ReqStatus.Size = UDim2.new(1, -20, 0, 16)
-    ReqStatus.Font = Enum.Font.Gotham
-    ReqStatus.Text = "RequestAbility: " .. RequestAbilityExists
-    ReqStatus.TextColor3 = (RequestAbilityExists == "✅ ATIVO") and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    ReqStatus.TextSize = 11
-    ReqStatus.TextXAlignment = Enum.TextXAlignment.Left
-    
-    local HakiStatus = Instance.new("TextLabel")
-    HakiStatus.Parent = RemoteStatus
-    HakiStatus.BackgroundTransparency = 1
-    HakiStatus.Position = UDim2.new(0, 10, 0, 36)
-    HakiStatus.Size = UDim2.new(1, -20, 0, 16)
-    HakiStatus.Font = Enum.Font.Gotham
-    HakiStatus.Text = "HakiRemote: " .. HakiRemoteExists
-    HakiStatus.TextColor3 = (HakiRemoteExists == "✅ ATIVO") and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    HakiStatus.TextSize = 11
-    HakiStatus.TextXAlignment = Enum.TextXAlignment.Left
-    
-    local ObsStatus = Instance.new("TextLabel")
-    ObsStatus.Parent = RemoteStatus
-    ObsStatus.BackgroundTransparency = 1
-    ObsStatus.Position = UDim2.new(0, 10, 0, 52)
-    ObsStatus.Size = UDim2.new(1, -20, 0, 16)
-    ObsStatus.Font = Enum.Font.Gotham
-    ObsStatus.Text = "ObservationHakiRemote: " .. ObservationExists
-    ObsStatus.TextColor3 = (ObservationExists == "✅ ATIVO") and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    ObsStatus.TextSize = 11
-    ObsStatus.TextXAlignment = Enum.TextXAlignment.Left
+    -- Atualizar status periodicamente
+    task.spawn(function()
+        while true do
+            CheckHakiStatus()
+            BusoStatus.Text = "Busoshoku: " .. (HakiStatus.BusoshokuActive and "✅ ATIVO" or "❌ INATIVO")
+            BusoStatus.TextColor3 = HakiStatus.BusoshokuActive and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+            KenStatus.Text = "Kenbunshoku: " .. (HakiStatus.KenbunshokuActive and "✅ ATIVO" or "❌ INATIVO")
+            KenStatus.TextColor3 = HakiStatus.KenbunshokuActive and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+            task.wait(1)
+        end
+    end)
 end
 
--- Aba Boss
-local function BuildBossTab()
+-- Aba Speed (Nova)
+local function BuildSpeedTab()
     ClearContent()
     
-    CreateSection("👑 BOSS SYSTEM")
+    CreateSection("⚡ SPEED SYSTEM")
     
-    -- Boss Summon NPC Info
-    local NPCLabel = Instance.new("Frame")
-    NPCLabel.Parent = ContentContainer
-    NPCLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-    NPCLabel.BorderSizePixel = 0
-    NPCLabel.Size = UDim2.new(1, 0, 0, 50)
-    
-    local NPCCorner = Instance.new("UICorner")
-    NPCCorner.CornerRadius = UDim.new(0, 6)
-    NPCCorner.Parent = NPCLabel
-    
-    local NPCStatus = Workspace:FindFirstChild("ServiceNPCs") and 
-                      Workspace.ServiceNPCs:FindFirstChild("SummonBossNPC") and "✅ NPC ENCONTRADO" or "❌ NPC NÃO ENCONTRADO"
-    
-    local NPCStatusLabel = Instance.new("TextLabel")
-    NPCStatusLabel.Parent = NPCLabel
-    NPCStatusLabel.BackgroundTransparency = 1
-    NPCStatusLabel.Size = UDim2.new(1, -20, 1, 0)
-    NPCStatusLabel.Position = UDim2.new(0, 10, 0, 0)
-    NPCStatusLabel.Font = Enum.Font.Gotham
-    NPCStatusLabel.Text = "Summon NPC: " .. NPCStatus
-    NPCStatusLabel.TextColor3 = (NPCStatus == "✅ NPC ENCONTRADO") and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    NPCStatusLabel.TextSize = 13
-    NPCStatusLabel.TextWrapped = true
-    NPCStatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-    
-    -- Botão Teleport para NPC
-    local TeleportButton = Instance.new("TextButton")
-    TeleportButton.Parent = ContentContainer
-    TeleportButton.BackgroundColor3 = Color3.fromRGB(255, 69, 0)
-    TeleportButton.BorderSizePixel = 0
-    TeleportButton.Size = UDim2.new(1, 0, 0, 40)
-    TeleportButton.Font = Enum.Font.GothamBold
-    TeleportButton.Text = "🚀 TELEPORT TO SUMMON NPC"
-    TeleportButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TeleportButton.TextSize = 14
-    
-    local TeleportCorner = Instance.new("UICorner")
-    TeleportCorner.CornerRadius = UDim.new(0, 6)
-    TeleportCorner.Parent = TeleportButton
-    
-    TeleportButton.MouseButton1Click:Connect(function()
-        local summonNPC = Workspace:FindFirstChild("ServiceNPCs") and 
-                         Workspace.ServiceNPCs:FindFirstChild("SummonBossNPC")
-        if summonNPC and summonNPC:FindFirstChild("HumanoidRootPart") then
+    CreateToggle(ContentContainer, "Speed Boost", function(enabled)
+        SailorState.SpeedBoost = enabled
+        
+        if enabled then
+            -- Aplica velocidade
             local char = Player.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                char.HumanoidRootPart.CFrame = summonNPC.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
+            if char and char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = SailorState.SpeedValue
+            end
+            
+            -- Loop para manter velocidade
+            Connections.Speed = RunService.Heartbeat:Connect(function()
+                if SailorState.SpeedBoost then
+                    local char = Player.Character
+                    if char and char:FindFirstChild("Humanoid") then
+                        if char.Humanoid.WalkSpeed ~= SailorState.SpeedValue then
+                            char.Humanoid.WalkSpeed = SailorState.SpeedValue
+                        end
+                    end
+                end
+            end)
+        else
+            -- Remove velocidade
+            if Connections.Speed then
+                Connections.Speed:Disconnect()
+                Connections.Speed = nil
+            end
+            local char = Player.Character
+            if char and char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = 16 -- Velocidade padrão
             end
         end
     end)
     
-    CreateSection("🔥 BOSSES DISPONÍVEIS")
-    
-    -- Lista de bosses
-    local bosses = {"Enel", "Mihawk", "Kaido", "Big Mom", "Shanks", "Blackbeard", "Akainu", "Kizaru", "Aokiji", "Doflamingo"}
-    
-    for _, bossName in ipairs(bosses) do
-        CreateBossButton(ContentContainer, bossName)
-    end
-    
-    CreateSection("⚔️ AUTO KILL BOSS")
-    
-    CreateToggle(ContentContainer, "Auto Kill Boss", function(enabled)
-        SailorState.AutoKillBoss = enabled
-        
-        if enabled then
-            task.spawn(function()
-                while SailorState.AutoKillBoss do
-                    task.wait(1)
-                    local bosses = FindActiveBosses()
-                    for _, boss in ipairs(bosses) do
-                        KillBoss(boss)
-                        task.wait(2)
-                    end
-                end
-            end)
+    CreateSlider(ContentContainer, "Speed Value", 16, 250, 50, function(value)
+        SailorState.SpeedValue = value
+        if SailorState.SpeedBoost then
+            local char = Player.Character
+            if char and char:FindFirstChild("Humanoid") then
+                char.Humanoid.WalkSpeed = value
+            end
         end
-    end)
+    end, "")
+    
+    -- Informação
+    local InfoFrame = Instance.new("Frame")
+    InfoFrame.Parent = ContentContainer
+    InfoFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    InfoFrame.BorderSizePixel = 0
+    InfoFrame.Size = UDim2.new(1, 0, 0, 50)
+    
+    local InfoCorner = Instance.new("UICorner")
+    InfoCorner.CornerRadius = UDim.new(0, 6)
+    InfoCorner.Parent = InfoFrame
+    
+    local InfoText = Instance.new("TextLabel")
+    InfoText.Parent = InfoFrame
+    InfoText.BackgroundTransparency = 1
+    InfoText.Size = UDim2.new(1, -20, 1, 0)
+    InfoText.Position = UDim2.new(0, 10, 0, 0)
+    InfoText.Font = Enum.Font.Gotham
+    InfoText.Text = "⚡ Aumenta sua velocidade de movimento\nValores muito altos podem crashar"
+    InfoText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    InfoText.TextSize = 12
+    InfoText.TextWrapped = true
+    InfoText.TextXAlignment = Enum.TextXAlignment.Left
 end
 
 -- Aba Weapons
@@ -892,6 +803,83 @@ local function BuildWeaponsTab()
     CreateToggle(ContentContainer, "Use Fruit", function(enabled)
         SailorState.UseFruit = enabled
     end)
+    
+    -- Armas encontradas
+    local WeaponsFrame = Instance.new("Frame")
+    WeaponsFrame.Parent = ContentContainer
+    WeaponsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    WeaponsFrame.BorderSizePixel = 0
+    WeaponsFrame.Size = UDim2.new(1, 0, 0, 70)
+    
+    local WeaponsCorner = Instance.new("UICorner")
+    WeaponsCorner.CornerRadius = UDim.new(0, 6)
+    WeaponsCorner.Parent = WeaponsFrame
+    
+    local WeaponsTitle = Instance.new("TextLabel")
+    WeaponsTitle.Parent = WeaponsFrame
+    WeaponsTitle.BackgroundTransparency = 1
+    WeaponsTitle.Position = UDim2.new(0, 10, 0, 5)
+    WeaponsTitle.Size = UDim2.new(1, -20, 0, 20)
+    WeaponsTitle.Font = Enum.Font.GothamBold
+    WeaponsTitle.Text = "ARMAS ENCONTRADAS"
+    WeaponsTitle.TextColor3 = Color3.fromRGB(255, 69, 0)
+    WeaponsTitle.TextSize = 14
+    WeaponsTitle.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local function UpdateWeaponsList()
+        local char = Player.Character
+        if not char then return end
+        local backpack = Player.Backpack
+        
+        local meleeFound = FindTool("Melee") and "✅" or "❌"
+        local swordFound = FindTool("Sword") and "✅" or "❌"
+        local fruitFound = FindTool("Fruit") and "✅" or "❌"
+        
+        MeleeLabel.Text = "Melee: " .. meleeFound
+        SwordLabel.Text = "Sword: " .. swordFound
+        FruitLabel.Text = "Fruit: " .. fruitFound
+    end
+    
+    local MeleeLabel = Instance.new("TextLabel")
+    MeleeLabel.Parent = WeaponsFrame
+    MeleeLabel.BackgroundTransparency = 1
+    MeleeLabel.Position = UDim2.new(0, 10, 0, 30)
+    MeleeLabel.Size = UDim2.new(0.33, -5, 0, 20)
+    MeleeLabel.Font = Enum.Font.Gotham
+    MeleeLabel.Text = "Melee: ⏳"
+    MeleeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MeleeLabel.TextSize = 12
+    MeleeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local SwordLabel = Instance.new("TextLabel")
+    SwordLabel.Parent = WeaponsFrame
+    SwordLabel.BackgroundTransparency = 1
+    SwordLabel.Position = UDim2.new(0.33, 0, 0, 30)
+    SwordLabel.Size = UDim2.new(0.33, -5, 0, 20)
+    SwordLabel.Font = Enum.Font.Gotham
+    SwordLabel.Text = "Sword: ⏳"
+    SwordLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SwordLabel.TextSize = 12
+    SwordLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local FruitLabel = Instance.new("TextLabel")
+    FruitLabel.Parent = WeaponsFrame
+    FruitLabel.BackgroundTransparency = 1
+    FruitLabel.Position = UDim2.new(0.66, 0, 0, 30)
+    FruitLabel.Size = UDim2.new(0.34, -10, 0, 20)
+    FruitLabel.Font = Enum.Font.Gotham
+    FruitLabel.Text = "Fruit: ⏳"
+    FruitLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    FruitLabel.TextSize = 12
+    FruitLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    -- Atualizar lista de armas
+    task.spawn(function()
+        while true do
+            UpdateWeaponsList()
+            task.wait(2)
+        end
+    end)
 end
 
 -- Conectar botões de aba
@@ -903,7 +891,7 @@ for i, tabButton in ipairs(Tabs) do
         
         if i == 1 then BuildSkillsTab()
         elseif i == 2 then BuildHakiTab()
-        elseif i == 3 then BuildBossTab()
+        elseif i == 3 then BuildSpeedTab()
         elseif i == 4 then BuildWeaponsTab()
         end
     end)
@@ -911,6 +899,30 @@ end
 
 -- Iniciar com primeira aba
 BuildSkillsTab()
+
+-- =====================================================================
+-- HAKI MONITOR LOOP (Reativa se desativar)
+-- =====================================================================
+task.spawn(function()
+    while true do
+        task.wait(SailorState.HakiCheckInterval)
+        
+        -- Verifica e reativa Haki se necessário
+        if SailorState.AutoBusoshoku or SailorState.AutoKenbunshoku then
+            CheckHakiStatus()
+            
+            if SailorState.AutoBusoshoku and not HakiStatus.BusoshokuActive then
+                ActivateBusoshoku()
+                print("🛡️ Reativando Busoshoku Haki")
+            end
+            
+            if SailorState.AutoKenbunshoku and not HakiStatus.KenbunshokuActive then
+                ActivateKenbunshoku()
+                print("👁️ Reativando Kenbunshoku Haki")
+            end
+        end
+    end
+end)
 
 -- =====================================================================
 -- CONTROLES DA INTERFACE
@@ -933,23 +945,42 @@ CloseButton.MouseButton1Click:Connect(function()
     SailorState.AutoSkillV = false
     SailorState.AutoBusoshoku = false
     SailorState.AutoKenbunshoku = false
-    SailorState.AutoKillBoss = false
+    SailorState.SpeedBoost = false
+    
+    -- Resetar velocidade
+    local char = Player.Character
+    if char and char:FindFirstChild("Humanoid") then
+        char.Humanoid.WalkSpeed = 16
+    end
     
     ScreenGui:Destroy()
     getgenv().SAILOR_PRO_LOADED = false
+end)
+
+-- Respawn handler
+Player.CharacterAdded:Connect(function()
+    task.wait(1)
+    -- Reaplicar speed se estiver ativo
+    if SailorState.SpeedBoost then
+        local char = Player.Character
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.WalkSpeed = SailorState.SpeedValue
+        end
+    end
 end)
 
 -- =====================================================================
 -- MENSAGEM DE LOAD
 -- =====================================================================
 print("╔══════════════════════════════════╗")
-print("║   ⚓ SAILOR PRO v2.0 LOADED      ║")
+print("║   ⚓ SAILOR PRO v3.0 LOADED      ║")
 print("╠══════════════════════════════════╣")
+print("║  ✅ AutoSkill CORRIGIDO          ║")
 print("║  ✅ RequestAbility (1-4)         ║")
 print("║  ✅ HakiRemote (Toggle)          ║")
-print("║  ✅ ObservationHakiRemote (Toggle)║")
-print("║  ✅ Boss Spawner System          ║")
-print("║  ✅ Auto Kill Boss               ║")
+print("║  ✅ ObservationHakiRemote        ║")
+print("║  ✅ Haki Monitor (Reativação)    ║")
+print("║  ✅ Speed System                  ║")
 print("║  ✅ Melee/Sword/Fruit            ║")
 print("║  📱 Mobile Compatible            ║")
 print("╚══════════════════════════════════╝")
