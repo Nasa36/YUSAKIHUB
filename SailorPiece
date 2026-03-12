@@ -1,5 +1,5 @@
--- ⚓ SAILOR PRO v1.0 - Sailor Piece
--- Versão com Haki remotes e Boss Spawner
+-- ⚓ SAILOR PRO v2.0 - Sailor Piece
+-- Versão com remotes específicos: RequestAbility, HakiRemote, ObservationHakiRemote
 
 if getgenv().SAILOR_PRO_LOADED then
     warn("SAILOR PRO já está em execução!")
@@ -12,28 +12,26 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local Workspace = game:GetService("Workspace")
 
 local Player = Players.LocalPlayer
 
 -- Estado do Hub
 local SailorState = {
-    -- Auto Skills
+    -- Auto Skills (RequestAbility)
     AutoSkillZ = false,
     AutoSkillX = false,
     AutoSkillC = false,
     AutoSkillV = false,
     SkillDelay = 0.1,
     
-    -- Auto Haki (USANDO REMOTES ESPECÍFICOS)
+    -- Auto Haki (HakiRemote / ObservationHakiRemote)
     AutoBusoshoku = false,
     AutoKenbunshoku = false,
     
     -- Boss System
     AutoKillBoss = false,
     SelectedBoss = nil,
-    BossList = {},
     
     -- Weapon Selection
     UseMelee = true,
@@ -61,38 +59,49 @@ else
 end
 
 -- =====================================================================
--- FUNÇÕES ESPECÍFICAS DO SAILOR PIECE
+-- FUNÇÕES ESPECÍFICAS COM OS REMOTES FORNECIDOS
 -- =====================================================================
 
--- Função para ativar Haki usando os remotes específicos
-local function ActivateBusoshoku()
+-- Função para usar skill via RequestAbility
+local function UseSkill(skillIndex)
+    -- skillIndex: 1 = Z, 2 = X, 3 = C, 4 = V (provavelmente)
     pcall(function()
-        local HakiRemote = ReplicatedStorage:FindFirstChild("RemoteEvents") and 
-                          ReplicatedStorage.RemoteEvents:FindFirstChild("HakiRemote")
-        if HakiRemote then
-            HakiRemote:FireServer()
-            return true
-        end
-        return false
+        -- Usando exatamente o remote que você forneceu
+        local args = {
+            [1] = skillIndex
+        }
+        
+        ReplicatedStorage:WaitForChild("RemoteEvents", 9e9):WaitForChild("RequestAbility", 9e9):FireServer(unpack(args))
     end)
 end
 
+-- Função para ativar Busoshoku Haki
+local function ActivateBusoshoku()
+    pcall(function()
+        -- Usando exatamente o remote que você forneceu
+        local args = {
+            [1] = "Toggle"
+        }
+        
+        ReplicatedStorage:WaitForChild("RemoteEvents", 9e9):WaitForChild("HakiRemote", 9e9):FireServer(unpack(args))
+    end)
+end
+
+-- Função para ativar Kenbunshoku Haki
 local function ActivateKenbunshoku()
     pcall(function()
-        local ObservationRemote = ReplicatedStorage:FindFirstChild("RemoteEvents") and 
-                                 ReplicatedStorage.RemoteEvents:FindFirstChild("ObservationHakiRemote")
-        if ObservationRemote then
-            ObservationRemote:FireServer()
-            return true
-        end
-        return false
+        -- Usando exatamente o remote que você forneceu
+        local args = {
+            [1] = "Toggle"
+        }
+        
+        ReplicatedStorage:WaitForChild("RemoteEvents", 9e9):WaitForChild("ObservationHakiRemote", 9e9):FireServer(unpack(args))
     end)
 end
 
 -- Função para spawnar boss
 local function SpawnBoss(bossName)
     pcall(function()
-        -- Procura pelo SummonPrompt no NPC de summon
         local summonNPC = Workspace:FindFirstChild("ServiceNPCs") and 
                          Workspace.ServiceNPCs:FindFirstChild("SummonBossNPC")
         
@@ -100,20 +109,15 @@ local function SpawnBoss(bossName)
             local prompt = summonNPC.HumanoidRootPart:FindFirstChild("SummonPrompt")
             
             if prompt and prompt:IsA("ProximityPrompt") then
-                -- Teleporta para o NPC
                 local char = Player.Character
                 if char and char:FindFirstChild("HumanoidRootPart") then
                     char.HumanoidRootPart.CFrame = summonNPC.HumanoidRootPart.CFrame * CFrame.new(0, 0, 5)
-                    
-                    -- Aguarda um pouco e ativa o prompt
                     task.wait(0.5)
-                    
-                    -- Simula interação com o prompt
                     prompt:InputHoldBegin()
                     task.wait(1)
                     prompt:InputHoldEnd()
                     
-                    -- Se tiver remote de seleção de boss, tenta usar
+                    -- Se tiver remote de seleção de boss
                     local selectRemote = ReplicatedStorage:FindFirstChild("RemoteEvents") and 
                                         ReplicatedStorage.RemoteEvents:FindFirstChild("SelectBossRemote")
                     if selectRemote and bossName then
@@ -129,7 +133,6 @@ end
 local function FindActiveBosses()
     local bosses = {}
     pcall(function()
-        -- Procura por bosses no Workspace (padrões comuns)
         for _, obj in ipairs(Workspace:GetDescendants()) do
             if obj:IsA("Model") and obj:FindFirstChild("Humanoid") and obj:FindFirstChild("HumanoidRootPart") then
                 local humanoid = obj:FindFirstChildOfClass("Humanoid")
@@ -158,24 +161,22 @@ local function KillBoss(boss)
         local bossHumanoid = boss:FindFirstChildOfClass("Humanoid")
         
         if bossHRP and bossHumanoid and bossHumanoid.Health > 0 then
-            -- Teleporta para o boss
             char.HumanoidRootPart.CFrame = bossHRP.CFrame * CFrame.new(0, 0, 8)
             
-            -- Usa skills automaticamente
             if SailorState.AutoSkillZ then
-                UseSkill(Enum.KeyCode.Z)
+                UseSkill(1) -- RequestAbility com index 1 (Z)
             end
             if SailorState.AutoSkillX then
                 task.wait(0.1)
-                UseSkill(Enum.KeyCode.X)
+                UseSkill(2) -- RequestAbility com index 2 (X)
             end
             if SailorState.AutoSkillC then
                 task.wait(0.1)
-                UseSkill(Enum.KeyCode.C)
+                UseSkill(3) -- RequestAbility com index 3 (C)
             end
             if SailorState.AutoSkillV then
                 task.wait(0.1)
-                UseSkill(Enum.KeyCode.V)
+                UseSkill(4) -- RequestAbility com index 4 (V)
             end
         end
     end)
@@ -262,43 +263,8 @@ local function EquipWeapon(weaponType)
     return true
 end
 
--- Função para usar skill (apenas remotes)
-local function UseSkill(key)
-    local keyToIndex = {
-        [Enum.KeyCode.Z] = 1,
-        [Enum.KeyCode.X] = 2,
-        [Enum.KeyCode.C] = 3,
-        [Enum.KeyCode.V] = 4,
-    }
-    
-    local skillIndex = keyToIndex[key]
-    if not skillIndex then return end
-    
-    pcall(function()
-        local remoteLocations = {
-            ReplicatedStorage:FindFirstChild("Remotes"),
-            ReplicatedStorage:FindFirstChild("RemoteEvents"),
-            ReplicatedStorage:FindFirstChild("Skills"),
-        }
-        
-        for _, location in ipairs(remoteLocations) do
-            if location then
-                local remote = location:FindFirstChild("UseSkill") or 
-                              location:FindFirstChild("ActivateSkill") or
-                              location:FindFirstChild("Skill") or
-                              location:FindFirstChild("UseAbility")
-                
-                if remote and remote:IsA("RemoteEvent") then
-                    remote:FireServer(skillIndex)
-                    return
-                end
-            end
-        end
-    end)
-end
-
--- Loop de AutoSkill
-local function RunAutoSkillLoop(stateKey, skillKey)
+-- Loop de AutoSkill usando RequestAbility
+local function RunAutoSkillLoop(stateKey, skillIndex)
     return task.spawn(function()
         while SailorState[stateKey] do
             task.wait(SailorState.SkillDelay)
@@ -306,21 +272,21 @@ local function RunAutoSkillLoop(stateKey, skillKey)
             pcall(function()
                 if SailorState.UseMelee then
                     if EquipWeapon("Melee") then
-                        UseSkill(skillKey)
+                        UseSkill(skillIndex)
                     end
                 end
                 
                 if SailorState.UseSword then
                     task.wait(0.05)
                     if EquipWeapon("Sword") then
-                        UseSkill(skillKey)
+                        UseSkill(skillIndex)
                     end
                 end
                 
                 if SailorState.UseFruit then
                     task.wait(0.05)
                     if EquipWeapon("Fruit") then
-                        UseSkill(skillKey)
+                        UseSkill(skillIndex)
                     end
                 end
             end)
@@ -387,7 +353,7 @@ Title.Parent = TitleBar
 Title.BackgroundTransparency = 1
 Title.Size = UDim2.new(1, 0, 1, 0)
 Title.Font = Enum.Font.GothamBold
-Title.Text = "⚓ SAILOR PRO"
+Title.Text = "⚓ SAILOR PRO v2.0"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.TextSize = 18
 
@@ -690,30 +656,30 @@ local function ClearContent()
     end
 end
 
--- Aba Skills
+-- Aba Skills (com RequestAbility)
 local function BuildSkillsTab()
     ClearContent()
     
-    CreateSection("⚡ AUTO SKILLS")
+    CreateSection("⚡ AUTO SKILLS (RequestAbility)")
     
-    CreateToggle(ContentContainer, "Auto Skill Z", function(enabled)
+    CreateToggle(ContentContainer, "Auto Skill Z (Index 1)", function(enabled)
         SailorState.AutoSkillZ = enabled
-        if enabled then RunAutoSkillLoop("AutoSkillZ", Enum.KeyCode.Z) end
+        if enabled then RunAutoSkillLoop("AutoSkillZ", 1) end
     end)
     
-    CreateToggle(ContentContainer, "Auto Skill X", function(enabled)
+    CreateToggle(ContentContainer, "Auto Skill X (Index 2)", function(enabled)
         SailorState.AutoSkillX = enabled
-        if enabled then RunAutoSkillLoop("AutoSkillX", Enum.KeyCode.X) end
+        if enabled then RunAutoSkillLoop("AutoSkillX", 2) end
     end)
     
-    CreateToggle(ContentContainer, "Auto Skill C", function(enabled)
+    CreateToggle(ContentContainer, "Auto Skill C (Index 3)", function(enabled)
         SailorState.AutoSkillC = enabled
-        if enabled then RunAutoSkillLoop("AutoSkillC", Enum.KeyCode.C) end
+        if enabled then RunAutoSkillLoop("AutoSkillC", 3) end
     end)
     
-    CreateToggle(ContentContainer, "Auto Skill V", function(enabled)
+    CreateToggle(ContentContainer, "Auto Skill V (Index 4)", function(enabled)
         SailorState.AutoSkillV = enabled
-        if enabled then RunAutoSkillLoop("AutoSkillV", Enum.KeyCode.V) end
+        if enabled then RunAutoSkillLoop("AutoSkillV", 4) end
     end)
     
     CreateSlider(ContentContainer, "Skill Delay", 0.05, 1, 0.1, function(value)
@@ -721,11 +687,11 @@ local function BuildSkillsTab()
     end)
 end
 
--- Aba Haki
+-- Aba Haki (com HakiRemote e ObservationHakiRemote)
 local function BuildHakiTab()
     ClearContent()
     
-    CreateSection("🛡️ AUTO HAKI (REMOTES)")
+    CreateSection("🛡️ AUTO HAKI (Toggle Remotes)")
     
     CreateToggle(ContentContainer, "Auto Busoshoku Haki", function(enabled)
         SailorState.AutoBusoshoku = enabled
@@ -734,7 +700,7 @@ local function BuildHakiTab()
             task.spawn(function()
                 while SailorState.AutoBusoshoku do
                     task.wait(8)
-                    ActivateBusoshoku()
+                    ActivateBusoshoku() -- Usa HakiRemote com "Toggle"
                 end
             end)
         end
@@ -747,7 +713,7 @@ local function BuildHakiTab()
             task.spawn(function()
                 while SailorState.AutoKenbunshoku do
                     task.wait(10)
-                    ActivateKenbunshoku()
+                    ActivateKenbunshoku() -- Usa ObservationHakiRemote com "Toggle"
                 end
             end)
         end
@@ -758,7 +724,7 @@ local function BuildHakiTab()
     RemoteStatus.Parent = ContentContainer
     RemoteStatus.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
     RemoteStatus.BorderSizePixel = 0
-    RemoteStatus.Size = UDim2.new(1, 0, 0, 60)
+    RemoteStatus.Size = UDim2.new(1, 0, 0, 70)
     
     local StatusCorner = Instance.new("UICorner")
     StatusCorner.CornerRadius = UDim.new(0, 6)
@@ -767,37 +733,58 @@ local function BuildHakiTab()
     local StatusLabel = Instance.new("TextLabel")
     StatusLabel.Parent = RemoteStatus
     StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Size = UDim2.new(1, 0, 0.5, 0)
+    StatusLabel.Size = UDim2.new(1, 0, 0.4, 0)
     StatusLabel.Font = Enum.Font.GothamBold
     StatusLabel.Text = "REMOTE STATUS"
     StatusLabel.TextColor3 = Color3.fromRGB(255, 69, 0)
     StatusLabel.TextSize = 14
     
-    local HakiRemoteExists = ReplicatedStorage:FindFirstChild("RemoteEvents") and 
-                             ReplicatedStorage.RemoteEvents:FindFirstChild("HakiRemote") and "✅ ATIVO" or "❌ NÃO ENCONTRADO"
-    local ObservationExists = ReplicatedStorage:FindFirstChild("RemoteEvents") and 
-                              ReplicatedStorage.RemoteEvents:FindFirstChild("ObservationHakiRemote") and "✅ ATIVO" or "❌ NÃO ENCONTRADO"
+    -- Verificar RequestAbility
+    local RequestAbilityExists = pcall(function()
+        return ReplicatedStorage:WaitForChild("RemoteEvents", 1):WaitForChild("RequestAbility", 1) ~= nil
+    end) and "✅ ATIVO" or "❌ NÃO ENCONTRADO"
+    
+    -- Verificar HakiRemote
+    local HakiRemoteExists = pcall(function()
+        return ReplicatedStorage:WaitForChild("RemoteEvents", 1):WaitForChild("HakiRemote", 1) ~= nil
+    end) and "✅ ATIVO" or "❌ NÃO ENCONTRADO"
+    
+    -- Verificar ObservationHakiRemote
+    local ObservationExists = pcall(function()
+        return ReplicatedStorage:WaitForChild("RemoteEvents", 1):WaitForChild("ObservationHakiRemote", 1) ~= nil
+    end) and "✅ ATIVO" or "❌ NÃO ENCONTRADO"
+    
+    local ReqStatus = Instance.new("TextLabel")
+    ReqStatus.Parent = RemoteStatus
+    ReqStatus.BackgroundTransparency = 1
+    ReqStatus.Position = UDim2.new(0, 10, 0, 20)
+    ReqStatus.Size = UDim2.new(1, -20, 0, 16)
+    ReqStatus.Font = Enum.Font.Gotham
+    ReqStatus.Text = "RequestAbility: " .. RequestAbilityExists
+    ReqStatus.TextColor3 = (RequestAbilityExists == "✅ ATIVO") and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    ReqStatus.TextSize = 11
+    ReqStatus.TextXAlignment = Enum.TextXAlignment.Left
     
     local HakiStatus = Instance.new("TextLabel")
     HakiStatus.Parent = RemoteStatus
     HakiStatus.BackgroundTransparency = 1
-    HakiStatus.Position = UDim2.new(0, 10, 0, 20)
-    HakiStatus.Size = UDim2.new(1, -20, 0, 20)
+    HakiStatus.Position = UDim2.new(0, 10, 0, 36)
+    HakiStatus.Size = UDim2.new(1, -20, 0, 16)
     HakiStatus.Font = Enum.Font.Gotham
     HakiStatus.Text = "HakiRemote: " .. HakiRemoteExists
     HakiStatus.TextColor3 = (HakiRemoteExists == "✅ ATIVO") and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    HakiStatus.TextSize = 12
+    HakiStatus.TextSize = 11
     HakiStatus.TextXAlignment = Enum.TextXAlignment.Left
     
     local ObsStatus = Instance.new("TextLabel")
     ObsStatus.Parent = RemoteStatus
     ObsStatus.BackgroundTransparency = 1
-    ObsStatus.Position = UDim2.new(0, 10, 0, 35)
-    ObsStatus.Size = UDim2.new(1, -20, 0, 20)
+    ObsStatus.Position = UDim2.new(0, 10, 0, 52)
+    ObsStatus.Size = UDim2.new(1, -20, 0, 16)
     ObsStatus.Font = Enum.Font.Gotham
     ObsStatus.Text = "ObservationHakiRemote: " .. ObservationExists
     ObsStatus.TextColor3 = (ObservationExists == "✅ ATIVO") and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    ObsStatus.TextSize = 12
+    ObsStatus.TextSize = 11
     ObsStatus.TextXAlignment = Enum.TextXAlignment.Left
 end
 
@@ -861,7 +848,7 @@ local function BuildBossTab()
     
     CreateSection("🔥 BOSSES DISPONÍVEIS")
     
-    -- Lista de bosses comuns em Sailor Piece
+    -- Lista de bosses
     local bosses = {"Enel", "Mihawk", "Kaido", "Big Mom", "Shanks", "Blackbeard", "Akainu", "Kizaru", "Aokiji", "Doflamingo"}
     
     for _, bossName in ipairs(bosses) do
@@ -956,10 +943,11 @@ end)
 -- MENSAGEM DE LOAD
 -- =====================================================================
 print("╔══════════════════════════════════╗")
-print("║     ⚓ SAILOR PRO LOADED         ║")
+print("║   ⚓ SAILOR PRO v2.0 LOADED      ║")
 print("╠══════════════════════════════════╣")
-print("║  ✅ Auto Skills Z/X/C/V          ║")
-print("║  ✅ Auto Haki (Remotes)          ║")
+print("║  ✅ RequestAbility (1-4)         ║")
+print("║  ✅ HakiRemote (Toggle)          ║")
+print("║  ✅ ObservationHakiRemote (Toggle)║")
 print("║  ✅ Boss Spawner System          ║")
 print("║  ✅ Auto Kill Boss               ║")
 print("║  ✅ Melee/Sword/Fruit            ║")
