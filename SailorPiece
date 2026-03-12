@@ -1,192 +1,214 @@
--- YUSAKI HUB STYLE UI
-
 local player = game.Players.LocalPlayer
 local rs = game:GetService("ReplicatedStorage")
-local remotes = rs:WaitForChild("RemoteEvents")
+local run = game:GetService("RunService")
+local HakiRemote = rs.RemoteEvents.HakiRemote
+local ObsHakiRemote = rs.RemoteEvents.ObservationHakiRemote
+local AbilityRemote = rs.AbilitySystem.Remotes.RequestAbility
+local HitRemote = rs.CombatSystem.Remotes.RequestHit
+local states={
+    autoClick=false,
+    autoZ=false,
+    autoX=false,
+    autoC=false,
+    autoV=false,
+    autoHaki=false,
+    autoObs=false,
+    esp=false,
+    lock=false
+}
+local savedCFrame=nil
 
-_G.AutoSkill = false
-_G.AutoHaki = false
-_G.AutoObs = false
-_G.ESP = false
-
--- REMOTES
-
-local function Haki()
-    remotes:WaitForChild("HakiRemote"):FireServer("Toggle")
-end
-
-local function Obs()
-    remotes:WaitForChild("ObservationHakiRemote"):FireServer("Toggle")
-end
-
-local function Skill(id)
-    remotes:WaitForChild("RequestAbility"):FireServer(id)
-end
+-- DEVICE DETECTION
+local UserInputService = game:GetService("UserInputService")
+local isMobile = UserInputService:GetLastInputType() == Enum.UserInputType.Touch
 
 -- GUI
+local gui=Instance.new("ScreenGui")
+gui.Parent=player.PlayerGui
+gui.ResetOnSpawn=false
+if isMobile then
+    gui.Size=UDim2.new(1,0,1,0)
+else
+    gui.Size=UDim2.new(1,0,1,0)
+end
 
-local gui = Instance.new("ScreenGui")
-gui.Parent = game.CoreGui
-gui.Name = "YusakiHub"
+-- FLOATING BUTTON
+local open=Instance.new("TextButton")
+open.Parent=gui
+open.Size=UDim2.new(0,50,0,50)
+open.Position=UDim2.new(0,10,0.5,-25)
+open.Text="Y"
+open.TextScaled=true
+open.BackgroundColor3=Color3.fromRGB(100,150,255)
+open.TextColor3=Color3.new(1,1,1)
+open.Font=Enum.Font.GothamBold
+open.BorderSizePixel=0
+open.ZIndex=10
+local corner=Instance.new("UICorner",open)
+corner.CornerRadius=UDim.new(1,0)
+local shadow=Instance.new("UIStroke",open)
+shadow.Color=Color3.fromRGB(70,110,220)
+shadow.Thickness=2
 
-local main = Instance.new("Frame",gui)
-main.Size = UDim2.new(0,650,0,400)
-main.Position = UDim2.new(0.5,-325,0.5,-200)
-main.BackgroundColor3 = Color3.fromRGB(25,25,40)
-main.BorderSizePixel = 0
-Instance.new("UICorner",main).CornerRadius = UDim.new(0,10)
+-- MAIN FRAME
+local frame=Instance.new("Frame")
+frame.Parent=gui
+local frameSize = isMobile and UDim2.new(0.9,0,0.7,0) or UDim2.new(0,340,0,420)
+local framePos = isMobile and UDim2.new(0.05,0,0.15,0) or UDim2.new(0.5,-170,0.5,-210)
+frame.Size=frameSize
+frame.Position=framePos
+frame.BackgroundColor3=Color3.fromRGB(15,15,20)
+frame.Visible=false
+frame.ZIndex=5
+frame.ClipsDescendants=true
+local frameCorner=Instance.new("UICorner",frame)
+frameCorner.CornerRadius=UDim.new(0,15)
 
--- SIDEBAR
+-- SHADOW EFFECT
+local frameShadow=Instance.new("UIStroke",frame)
+frameShadow.Color=Color3.fromRGB(100,150,255)
+frameShadow.Thickness=1
+frameShadow.Transparency=0.5
 
-local sidebar = Instance.new("Frame",main)
-sidebar.Size = UDim2.new(0,170,1,0)
-sidebar.BackgroundColor3 = Color3.fromRGB(18,18,35)
-sidebar.BorderSizePixel = 0
+-- GRADIENT BACKGROUND
+local gradient=Instance.new("UIGradient",frame)
+gradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(15,15,20)), ColorSequenceKeypoint.new(1,Color3.fromRGB(25,25,35))})
+gradient.Rotation=45
+
+-- TOP BAR
+local top=Instance.new("Frame")
+top.Parent=frame
+top.Size=UDim2.new(1,0,0,45)
+top.BackgroundColor3=Color3.fromRGB(30,30,45)
+top.BorderSizePixel=0
+top.ZIndex=6
+local topGradient=Instance.new("UIGradient",top)
+topGradient.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(100,150,255)), ColorSequenceKeypoint.new(1,Color3.fromRGB(70,110,220))})
+topGradient.Rotation=90
 
 -- TITLE
+local title=Instance.new("TextLabel")
+title.Parent=top
+title.Size=UDim2.new(1,0,1,0)
+title.Text="⚡ YUSAKI HUB ⚡"
+title.BackgroundTransparency=1
+title.TextColor3=Color3.new(1,1,1)
+title.TextScaled=true
+title.Font=Enum.Font.GothamBold
+title.ZIndex=7
 
-local title = Instance.new("TextLabel",main)
-title.Text = "YUSAKI HUB"
-title.Size = UDim2.new(1,0,0,40)
-title.BackgroundTransparency = 1
-title.TextColor3 = Color3.new(1,1,1)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 20
+-- CLOSE BUTTON
+local closeBtn=Instance.new("TextButton")
+closeBtn.Parent=top
+closeBtn.Size=UDim2.new(0,35,0,35)
+closeBtn.Position=UDim2.new(1,-40,0.5,-17)
+closeBtn.Text="✕"
+closeBtn.TextScaled=true
+closeBtn.BackgroundTransparency=0.3
+closeBtn.BackgroundColor3=Color3.fromRGB(255,100,100)
+closeBtn.TextColor3=Color3.new(1,1,1)
+closeBtn.BorderSizePixel=0
+closeBtn.Font=Enum.Font.GothamBold
+closeBtn.ZIndex=8
+local closeBtnCorner=Instance.new("UICorner",closeBtn)
+closeBtnCorner.CornerRadius=UDim.new(0,8)
+closeBtn.MouseButton1Click:Connect(function() frame.Visible=false end)
 
--- PAGE AREA
+-- SCROLL FRAME
+local scroll=Instance.new("ScrollingFrame")
+scroll.Parent=frame
+scroll.Size=UDim2.new(1,0,1,-45)
+scroll.Position=UDim2.new(0,0,0,45)
+scroll.CanvasSize=UDim2.new(0,0,0,600)
+scroll.ScrollBarThickness=3
+scroll.BackgroundTransparency=1
+scroll.BorderSizePixel=0
+scroll.ZIndex=5
+local scrollPadding=Instance.new("UIPadding",scroll)
+scrollPadding.PaddingTop=UDim.new(0,8)
+scrollPadding.PaddingBottom=UDim.new(0,8)
+scrollPadding.PaddingLeft=UDim.new(0,8)
+scrollPadding.PaddingRight=UDim.new(0,8)
+local layout=Instance.new("UIListLayout",scroll)
+layout.Padding=UDim.new(0,6)
+layout.HorizontalAlignment=Enum.HorizontalAlignment.Center
 
-local page = Instance.new("Frame",main)
-page.Position = UDim2.new(0,180,0,50)
-page.Size = UDim2.new(1,-200,1,-60)
-page.BackgroundTransparency = 1
-
--- CARD
-
-local function Card(name,posY)
-
-    local card = Instance.new("Frame",page)
-    card.Size = UDim2.new(1,0,0,60)
-    card.Position = UDim2.new(0,0,0,posY)
-    card.BackgroundColor3 = Color3.fromRGB(35,35,60)
-    Instance.new("UICorner",card).CornerRadius = UDim.new(0,8)
-
-    local text = Instance.new("TextLabel",card)
-    text.Text = name
-    text.Size = UDim2.new(0.6,0,1,0)
-    text.BackgroundTransparency = 1
-    text.TextColor3 = Color3.new(1,1,1)
-    text.Font = Enum.Font.Gotham
-    text.TextSize = 16
-
-    local toggle = Instance.new("TextButton",card)
-    toggle.Size = UDim2.new(0,50,0,25)
-    toggle.Position = UDim2.new(1,-70,0.5,-12)
-    toggle.BackgroundColor3 = Color3.fromRGB(120,90,255)
-    toggle.Text = ""
-    Instance.new("UICorner",toggle).CornerRadius = UDim.new(1,0)
-
-    return toggle
-
+-- CATEGORY LABEL
+local function createCategory(text)
+    local label=Instance.new("TextLabel")
+    label.Parent=scroll
+    label.Size=UDim2.new(1,0,0,20)
+    label.Text=text
+    label.BackgroundTransparency=1
+    label.TextColor3=Color3.fromRGB(100,150,255)
+    label.TextScaled=true
+    label.Font=Enum.Font.GothamBold
+    label.TextXAlignment=Enum.TextXAlignment.Left
 end
 
--- TOGGLES
-
-local skillToggle = Card("Auto Skills Z X C V",0)
-local hakiToggle = Card("Auto Haki",70)
-local obsToggle = Card("Observation Haki",140)
-local espToggle = Card("ESP Players",210)
-
-skillToggle.MouseButton1Click:Connect(function()
-_G.AutoSkill = not _G.AutoSkill
-end)
-
-hakiToggle.MouseButton1Click:Connect(function()
-_G.AutoHaki = not _G.AutoHaki
-end)
-
-obsToggle.MouseButton1Click:Connect(function()
-_G.AutoObs = not _G.AutoObs
-end)
-
-espToggle.MouseButton1Click:Connect(function()
-_G.ESP = not _G.ESP
-end)
-
--- ESP
-
-local function createESP(plr)
-
-if plr == player then return end
-
-plr.CharacterAdded:Connect(function(char)
-
-repeat task.wait() until char:FindFirstChild("Head") and char:FindFirstChild("Humanoid")
-
-local head = char.Head
-local hum = char.Humanoid
-
-local bill = Instance.new("BillboardGui",head)
-bill.Size = UDim2.new(0,200,0,50)
-bill.AlwaysOnTop = true
-
-local txt = Instance.new("TextLabel",bill)
-txt.Size = UDim2.new(1,0,1,0)
-txt.BackgroundTransparency = 1
-txt.TextColor3 = Color3.fromRGB(255,0,0)
-txt.TextScaled = true
-txt.Font = Enum.Font.GothamBold
-
-task.spawn(function()
-while hum.Parent do
-if _G.ESP then
-txt.Text = plr.Name.." | HP: "..math.floor(hum.Health)
-else
-txt.Text = ""
-end
-task.wait(0.2)
-end
-end)
-
-local hl = Instance.new("Highlight")
-hl.FillColor = Color3.fromRGB(255,0,0)
-hl.OutlineColor = Color3.new(1,1,1)
-hl.Parent = char
-
-end)
-
+-- BUTTON FUNCTION
+local function toggle(text,callback)
+    local state=false
+    local b=Instance.new("TextButton")
+    b.Parent=scroll
+    b.Size=UDim2.new(0.95,0,0,38)
+    b.Text=text.." OFF"
+    b.BackgroundColor3=Color3.fromRGB(35,35,50)
+    b.TextColor3=Color3.new(1,1,1)
+    b.TextScaled=true
+    b.Font=Enum.Font.Gotham
+    b.BorderSizePixel=0
+    b.ZIndex=5
+    local bCorner=Instance.new("UICorner",b)
+bCorner.CornerRadius=UDim.new(0,10)
+    local bStroke=Instance.new("UIStroke",b)
+bStroke.Color=Color3.fromRGB(70,70,90)
+bStroke.Thickness=1
+    local function updateState()
+        if state then
+            b.Text=text.." ✓"
+            b.BackgroundColor3=Color3.fromRGB(100,150,255)
+bStroke.Color=Color3.fromRGB(150,200,255)
+        else
+            b.Text=text.." ✕"
+            b.BackgroundColor3=Color3.fromRGB(35,35,50)
+bStroke.Color=Color3.fromRGB(70,70,90)
+        end
+    end
+    b.MouseButton1Click:Connect(function()
+        state=not state
+        updateState()
+        callback(state)
+    end)
+    updateState()
 end
 
-for _,v in pairs(game.Players:GetPlayers()) do
-createESP(v)
-end
+-- COMBAT SECTION
+createCategory("⚔️ COMBAT")
+toggle("Auto M1",function(v) states.autoClick=v end)
+toggle("Auto Z",function(v) states.autoZ=v end)
+toggle("Auto X",function(v) states.autoX=v end)
+toggle("Auto C",function(v) states.autoC=v end)
+toggle("Auto V",function(v) states.autoV=v end)
 
-game.Players.PlayerAdded:Connect(createESP)
+-- HAKI SECTION
+createCategory("💫 HAKI")
+toggle("Auto Haki",function(v) states.autoHaki=v if v then HakiRemote:FireServer("Toggle") end end)
+toggle("Obs Haki",function(v) states.autoObs=v if v then ObsHakiRemote:FireServer("Toggle") end end)
 
--- LOOPS
+-- UTILITY SECTION
+createCategory("🎯 UTILITY")
+toggle("ESP Player",function(v) states.esp=v end)
+toggle("Lock Position",function(v) states.lock=v if v then local char=player.Character if char and char:FindFirstChild("HumanoidRootPart") then savedCFrame=char.HumanoidRootPart.CFrame end end end)
 
-task.spawn(function()
-while task.wait(0.4) do
-if _G.AutoSkill then
-Skill(1)
-Skill(2)
-Skill(3)
-Skill(4)
-end
-end
-end)
+-- OPEN BUTTON
+open.MouseButton1Click:Connect(function() frame.Visible=not frame.Visible end)
 
-task.spawn(function()
-while task.wait(3) do
-if _G.AutoHaki then
-Haki()
-end
-end
-end)
+-- AUTO M1
+task.spawn(function() while true do task.wait(.1) if states.autoClick then HitRemote:FireServer() end end end)
 
-task.spawn(function()
-while task.wait(5) do
-if _G.AutoObs then
-Obs()
-end
-end
-end)
+-- AUTO SKILLS
+task.spawn(function() while true do task.wait(.25) if states.autoZ then AbilityRemote:FireServer(1) end if states.autoX then AbilityRemote:FireServer(2) end if states.autoC then AbilityRemote:FireServer(3) end if states.autoV then AbilityRemote:FireServer(4) end end end)
+
+-- LOCK POSITION
+run.Heartbeat:Connect(function() if states.lock then local char=player.Character if char and char:FindFirstChild("HumanoidRootPart") then local root=char.HumanoidRootPart root.Velocity=Vector3.new() root.AssemblyLinearVelocity=Vector3.new() root.CFrame=savedCFrame end end end)
